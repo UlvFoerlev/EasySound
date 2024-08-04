@@ -1,0 +1,7 @@
+{
+    "action.play-sound.name": "Play Sound",
+    "action.play-sound.filepath": "Sound File",
+    "action.generic.cancel": "Cancel",
+    "action.generic.select": "Select",
+    "action.generic.volume": "Volume"
+}

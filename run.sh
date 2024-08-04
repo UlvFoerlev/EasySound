@@ -1,0 +1,1 @@
+ flatpak run com.core447.StreamController

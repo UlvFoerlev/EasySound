@@ -2,5 +2,15 @@
     "version": "",
     "thumbnail": "",
     "id": "",
-    "name": ""
+    "name": "EasySound",
+    "descriptions": {
+        "en_US": "This plugin allows you to play sounds from your local machine."
+    },
+    "short-descriptions": {
+        "en_US": "This plugin allows you to play sounds from your local machine."
+    },
+    "tags": [
+        "Audio",
+        "Effects"
+    ]
 }
