@@ -1,13 +1,13 @@
 {
-    "version": "",
-    "thumbnail": "",
-    "id": "",
-    "name": "EasySound",
+    "version": "1.10",
+    "thumbnail": "store/Thumbnail.png",
+    "id": "uf_easy_sound",
+    "name": "Easy Sound",
     "descriptions": {
         "en_US": "This plugin allows you to play sounds from your local machine."
     },
     "short-descriptions": {
-        "en_US": "This plugin allows you to play sounds from your local machine."
+        "en_US": "Play local audio files."
     },
     "tags": [
         "Audio",
