@@ -1,5 +1,3 @@
-from .__install__ import *
-
 # Import StreamController modules
 from src.backend.PluginManager.PluginBase import PluginBase
 from src.backend.PluginManager.ActionHolder import ActionHolder
