@@ -1,9 +1,14 @@
+from .__install__ import *
+
 # Import StreamController modules
 from src.backend.PluginManager.PluginBase import PluginBase
 from src.backend.PluginManager.ActionHolder import ActionHolder
 
 # Import actions
 from .actions.play_sound.play_sound import PlaySoundAction
+
+# Wiki
+# https://core447.com/streamcontroller/docs/latest/
 
 
 class PluginEasySound(PluginBase):
