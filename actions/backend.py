@@ -1,5 +1,6 @@
 from streamcontroller_plugin_tools import BackendBase
-from pydub import play, AudioSegment
+from pydub import AudioSegment
+from pydub.playback import play
 from pathlib import Path
 
 

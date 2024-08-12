@@ -65,6 +65,8 @@ class PlaySoundAction(SoundActionBase):
     def on_filepath_browse_click(self, entry):
         file_dialog = ChooseFileDialog(dialog_name="Select Audio File")
 
+        print(file_dialog.selected_file)
+
         self.filepath = file_dialog.selected_file or ""
 
     def on_filepath_change(self, entry, _):
@@ -74,6 +76,5 @@ class PlaySoundAction(SoundActionBase):
         self.volume = entry.get_value()
 
     def on_key_down(self):
-        print(self.filepath)
         if self.filepath:
             self.plugin_base.backend.play_sound()
