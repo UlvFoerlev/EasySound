@@ -77,4 +77,4 @@ class PlaySoundAction(SoundActionBase):
 
     def on_key_down(self):
         if self.filepath:
-            self.plugin_base.backend.play_sound()
+            self.plugin_base.backend.play_sound(path=self.filepath)
