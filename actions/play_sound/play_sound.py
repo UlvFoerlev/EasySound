@@ -2,7 +2,6 @@ from ..sound_base import SoundBase
 from gi.repository import Adw, Gtk
 from GtkHelper.GtkHelper import ScaleRow
 from ..chooser import ChooseFileDialog
-from pydub import play, AudioSegment
 
 
 class PlaySoundAction(SoundBase):
@@ -73,8 +72,3 @@ class PlaySoundAction(SoundBase):
 
     def on_volume_scale_change(self, entry):
         self.volume = entry.get_value()
-
-    def on_key_down(self):
-        if self.filepath:
-            song = AudioSegment.from_wav("note.wav")
-            play(song)
