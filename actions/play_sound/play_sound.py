@@ -30,11 +30,13 @@ class PlaySoundAction(SoundActionBase):
 
     @property
     def mode(self) -> Mode:
-        return self._get_property(key="mode", default=Mode.PRESS, enforce_type=Mode)
+        return Mode(
+            self._get_property(key="mode", default=Mode.PRESS, enforce_type=Mode)
+        )
 
     @mode.setter
     def mode(self, value: Mode):
-        self._set_property(key="mode", value=value)
+        self._set_property(key="mode", value=str(value))
 
     def get_config_rows(self):
         self.filepath_browse = Gtk.Button.new_with_label(
