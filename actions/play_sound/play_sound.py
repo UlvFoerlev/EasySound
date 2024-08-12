@@ -89,9 +89,9 @@ class PlaySoundAction(SoundActionBase):
         self.volume = entry.get_value()
 
     def on_key_down(self):
-        if self.filepath and Mode.PRESS in self.mode:
+        if self.filepath and Mode.PRESS == self.mode:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
 
     def on_key_release(self):
-        if self.filepath and Mode.RELEASE in self.mode:
+        if self.filepath and Mode.RELEASE == self.mode:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
