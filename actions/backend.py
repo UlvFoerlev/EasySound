@@ -6,7 +6,7 @@ from pathlib import Path
 
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.cached_sounds: dict[str, AudioSegment] = {}
 
