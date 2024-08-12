@@ -9,7 +9,7 @@ class PlaySoundAction(SoundActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.mode = Mode.PRESS
+        self.mode = Mode.RELEASE
 
     @property
     def filepath(self) -> str:
