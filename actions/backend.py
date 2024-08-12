@@ -1,19 +1,24 @@
 from streamcontroller_plugin_tools import BackendBase
-from pydub import AudioSegment
-from pydub.playback import _play_with_simpleaudio
+
+# from pydub import AudioSegment
+from pydub.playback import play
 from pathlib import Path
+import pygame as pg, Sound
 
 
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.cached_sounds: dict[str, AudioSegment] = {}
+        pg.mixer.init()
+        pg.init()
+
+        self.cached_sounds: dict[str, Sound] = {}
 
     def cache_sound(self, path: str | Path):
         key = path if isinstance(path, str) else str(path)
 
-        self.cached_sounds[key] = AudioSegment.from_wav(path)
+        self.cached_sounds[key] = pg.mixer.Sound(path)
 
     def play_sound(self, path: str | Path):
         key = path if isinstance(path, str) else str(path)
@@ -21,7 +26,7 @@ class Backend(BackendBase):
         if key not in self.cached_sounds:
             self.cache_sound(path=path)
 
-        _play_with_simpleaudio(self.cached_sounds[key])
+        self.cached_sounds[key].play()
 
 
 backend = Backend()
