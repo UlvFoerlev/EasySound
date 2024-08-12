@@ -58,7 +58,7 @@ class PlaySoundAction(SoundActionBase):
         )
         self.volume_scale.scale.set_draw_value(True)
 
-        self.mode_dropdown = Gtk.DropDown(items=[Mode.PRESS, Mode.RELEASE])
+        self.mode_dropdown = Gtk.DropDown.new_from_strings([Mode.PRESS, Mode.RELEASE])
 
         # Connect entries
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
