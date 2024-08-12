@@ -9,8 +9,6 @@ class PlaySoundAction(SoundActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.mode = Mode.RELEASE
-
     @property
     def filepath(self) -> str:
         val = self._get_property(key="filepath", default="", enforce_type=str)
@@ -30,14 +28,13 @@ class PlaySoundAction(SoundActionBase):
 
     @property
     def mode(self) -> Mode:
-        v = self._get_property(key="mode", default=Mode.PRESS, enforce_type=str)
-        print(v, type(v))
         return Mode(
             self._get_property(key="mode", default=Mode.PRESS, enforce_type=str)
         )
 
     @mode.setter
     def mode(self, value: Mode):
+        print(value, type(value))
         self._set_property(key="mode", value=str(value))
 
     def get_config_rows(self):
