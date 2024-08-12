@@ -2,11 +2,14 @@ from ..sound_action_base import SoundActionBase
 from gi.repository import Adw, Gtk
 from GtkHelper.GtkHelper import ScaleRow
 from ..chooser import ChooseFileDialog
+from ..modes import Mode, MODES
 
 
 class PlaySoundAction(SoundActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.mode = Mode.PRESS
 
     @property
     def filepath(self) -> str:
@@ -24,6 +27,14 @@ class PlaySoundAction(SoundActionBase):
     @volume.setter
     def volume(self, value: float):
         self._set_property(key="volume", value=value)
+
+    @property
+    def mode(self) -> Mode:
+        return self._get_property(key="mode", default=Mode.PRESS, enforce_type=Mode)
+
+    @mode.setter
+    def mode(self, value: Mode):
+        self._set_property(key="mode", value=value)
 
     def get_config_rows(self):
         self.filepath_browse = Gtk.Button.new_with_label(
@@ -76,5 +87,9 @@ class PlaySoundAction(SoundActionBase):
         self.volume = entry.get_value()
 
     def on_key_down(self):
-        if self.filepath:
+        if self.filepath and Mode.PRESS in self.mode:
+            self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
+
+    def on_key_release(self):
+        if self.filepath and Mode.RELEASE in self.mode:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
