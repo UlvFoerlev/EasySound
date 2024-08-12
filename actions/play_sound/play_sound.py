@@ -1,10 +1,10 @@
-from ..sound_base import SoundBase
+from ..sound_action_base import SoundActionBase
 from gi.repository import Adw, Gtk
 from GtkHelper.GtkHelper import ScaleRow
 from ..chooser import ChooseFileDialog
 
 
-class PlaySoundAction(SoundBase):
+class PlaySoundAction(SoundActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -72,3 +72,8 @@ class PlaySoundAction(SoundBase):
 
     def on_volume_scale_change(self, entry):
         self.volume = entry.get_value()
+
+    def on_key_down(self):
+        print(self.backend, self.filepath)
+        if self.filepath:
+            self.backend.play_sound()

@@ -2,7 +2,7 @@ from src.backend.PluginManager.ActionBase import ActionBase
 from typing import Any
 
 
-class SoundBase(ActionBase):
+class SoundActionBase(ActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -15,11 +15,13 @@ class SoundBase(ActionBase):
         if enforce_type and isinstance(value, enforce_type) is False:
             value = default
 
-        self.set_settings(settings)
-
         return value
 
     def _set_property(self, key: str, value: Any) -> None:
         settings = self.get_settings()
         settings[key] = value
         self.set_settings(settings)
+
+    @property
+    def backend(self):
+        return self.plugin_base.backend

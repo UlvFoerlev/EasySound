@@ -4,7 +4,7 @@ from streamcontroller_plugin_tools import BackendBase
 
 class Backend(BackendBase):
     def play_sound(self):
-        pass
+        print("SAFDJAFKJFKLAJFSÆAJFSA")
 
 
 backend = Backend()
