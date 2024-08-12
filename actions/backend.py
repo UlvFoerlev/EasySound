@@ -1,6 +1,6 @@
 from streamcontroller_plugin_tools import BackendBase
 from pydub import AudioSegment
-from pydub.playback import play
+from pydub.playback import _play_with_simpleaudio
 from pathlib import Path
 
 
@@ -21,7 +21,7 @@ class Backend(BackendBase):
         if key not in self.cached_sounds:
             self.cache_sound(path=path)
 
-        play(self.cached_sounds[key])
+        _play_with_simpleaudio(self.cached_sounds[key])
 
 
 backend = Backend()
