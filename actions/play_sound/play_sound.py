@@ -2,7 +2,7 @@ from ..sound_action_base import SoundActionBase
 from gi.repository import Adw, Gtk
 from GtkHelper.GtkHelper import ScaleRow
 from ..chooser import ChooseFileDialog
-from ..modes import Mode, MODES
+from ..modes import Mode
 
 
 class PlaySoundAction(SoundActionBase):

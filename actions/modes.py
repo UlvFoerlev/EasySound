@@ -7,11 +7,11 @@ class Mode(Flag):
     # HOLD = "Hold"
 
 
-MODES = [
-    Mode.PRESS,
-    Mode.RELEASE,
-    # Mode.PRESS | Mode.HOLD,
-    # Mode.HOLD | Mode.RELEASE,
-    Mode.PRESS | Mode.RELEASE,
-    # Mode.PRESS | Mode.HOLD | Mode.RELEASE,
-]
+# MODES = [
+#     Mode.PRESS,
+#     Mode.RELEASE,
+#     # Mode.PRESS | Mode.HOLD,
+#     # Mode.HOLD | Mode.RELEASE,
+#     Mode.PRESS | Mode.RELEASE,
+#     # Mode.PRESS | Mode.HOLD | Mode.RELEASE,
+# ]
