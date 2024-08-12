@@ -74,6 +74,6 @@ class PlaySoundAction(SoundActionBase):
         self.volume = entry.get_value()
 
     def on_key_down(self):
-        print(self.get_backend(), self.filepath)
+        print(self.filepath)
         if self.filepath:
-            self.get_backend().play_sound()
+            self.plugin_base.backend.play_sound()

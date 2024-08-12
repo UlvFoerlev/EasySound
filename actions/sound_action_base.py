@@ -21,6 +21,3 @@ class SoundActionBase(ActionBase):
         settings = self.get_settings()
         settings[key] = value
         self.set_settings(settings)
-
-    def get_backend(self):
-        return self.plugin_base.backend
