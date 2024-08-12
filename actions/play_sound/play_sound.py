@@ -34,7 +34,6 @@ class PlaySoundAction(SoundActionBase):
 
     @mode.setter
     def mode(self, value: Mode):
-        print(value, type(value))
         self._set_property(key="mode", value=str(value))
 
     def get_config_rows(self):
@@ -59,9 +58,12 @@ class PlaySoundAction(SoundActionBase):
         )
         self.volume_scale.scale.set_draw_value(True)
 
+        self.mode_dropdown = Gtk.Dropdown(items=[Mode.PRESS, Mode.RELEASE])
+
         # Connect entries
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
         self.filepath_input.connect("notify::text", self.on_filepath_change)
+        self.mode_dropdown.connect("notify::selected-item", self.on_select_mode)
         self.volume_scale.adjustment.connect(
             "value-changed", self.on_volume_scale_change
         )
@@ -86,6 +88,9 @@ class PlaySoundAction(SoundActionBase):
 
     def on_volume_scale_change(self, entry):
         self.volume = entry.get_value()
+
+    def on_select_mode(self, mode: Mode):
+        self.mode = mode
 
     def on_key_down(self):
         if self.filepath and Mode.PRESS == self.mode:
