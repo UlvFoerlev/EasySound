@@ -26,7 +26,7 @@ class Backend(BackendBase):
 
         sound = self.cached_sounds[key]
         real_volume = max(min((volume / 100.0), 1.0), 0.0)
-        sound.set_volume(value=real_volume)
+        sound.set_volume(real_volume)
         sound.play()
 
 
