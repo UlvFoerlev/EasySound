@@ -3,7 +3,8 @@ from streamcontroller_plugin_tools import BackendBase
 # from pydub import AudioSegment
 # from pydub.playback import play
 from pathlib import Path
-import pygame as pg, Sound
+import pygame as pg
+from pygame.mixer import Sound
 
 
 class Backend(BackendBase):
