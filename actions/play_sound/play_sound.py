@@ -1,5 +1,5 @@
 from gi.repository import Adw, Gtk
-from GtkHelper.GtkHelper import ComboRow, ScaleRow
+from GtkHelper.GtkHelper import ComboRow, ScaleRow, Pango
 
 from ..chooser import ChooseFileDialog
 from ..modes import Mode
@@ -59,12 +59,22 @@ class PlaySoundAction(SoundActionBase):
         )
         self.volume_scale.scale.set_draw_value(True)
 
-        self.mode_options = Gtk.ListStore.new([str(x) for x in Mode])
-
-        self.mode_dropdown = ComboRow(
-            title=self.plugin_base.lm.get("actions.play-sound.select_mode"),
-            model=self.mode_options,
+        self.dropdown_option = Gtk.ListStore.new([str])  # First Column: Name,
+        self.dropdown_name = Gtk.ListStore.new([str])
+        self.device_row = ComboRow(
+            title=self.plugin_base.lm.get("action.play-sound.select_mode"),
+            model=self.dropdown_name,
         )
+
+        self.dropdown_cell_renderer = Gtk.CellRendererText(
+            ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
+        )
+        self.device_row.combo_box.pack_start(self.dropdown_cell_renderer, True)
+        self.device_row.combo_box.add_attribute(self.dropdown_cell_renderer, "text", 0)
+
+        for mode in Mode:
+            self.dropdown_option.append([str(mode)])
+            self.dropdown_name.append([str(mode)])
 
         # Connect entries
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
