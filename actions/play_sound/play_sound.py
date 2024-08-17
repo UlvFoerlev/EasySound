@@ -71,6 +71,7 @@ class PlaySoundAction(SoundActionBase):
         )
         self.device_row.combo_box.pack_start(self.dropdown_cell_renderer, True)
         self.device_row.combo_box.add_attribute(self.dropdown_cell_renderer, "text", 0)
+        self.dropdown_option.clear()
 
         for mode in Mode:
             self.dropdown_option.append([str(mode)])
@@ -91,7 +92,7 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.volume_scale)
         base.append(self.device_row.combo_box)
 
-        return [self.device_row.combo_box]
+        return base
 
     def on_filepath_browse_click(self, entry):
         file_dialog = ChooseFileDialog(dialog_name="Select Audio File")
