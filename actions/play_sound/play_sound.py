@@ -23,7 +23,6 @@ class PlaySoundAction(SoundActionBase):
             return
 
         self._set_property(key="filepath", value=value)
-        self.filepath_input.set_text(self.filepath)
 
     @property
     def volume(self) -> float:
@@ -121,6 +120,7 @@ class PlaySoundAction(SoundActionBase):
 
     def _set_filepath(self, result: Path):
         self.filepath = str(result)
+        self.filepath_input.set_text(self.filepath)
 
     def on_filepath_browse_click(self, entry):
         file_dialog = ChooseFileDialog(
