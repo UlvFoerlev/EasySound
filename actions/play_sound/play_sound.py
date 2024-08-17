@@ -79,7 +79,9 @@ class PlaySoundAction(SoundActionBase):
         # Connect entries
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
         self.filepath_input.connect("notify::text", self.on_filepath_change)
-        self.mode_dropdown.connect("notify::selected-item", self.on_select_mode)
+        self.device_row.combo_boxmode_dropdown.connect(
+            "notify::selected-item", self.on_select_mode
+        )
         self.volume_scale.adjustment.connect(
             "value-changed", self.on_volume_scale_change
         )
@@ -89,7 +91,7 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.filepath_browse)
         base.append(self.filepath_input)
         base.append(self.volume_scale)
-        base.append(self.mode_dropdown)
+        base.append(self.device_row.combo_box)
 
         return base
 
