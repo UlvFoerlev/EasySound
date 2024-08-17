@@ -114,7 +114,9 @@ class PlaySoundAction(SoundActionBase):
         return base
 
     def on_filepath_browse_click(self, entry):
-        file_dialog = ChooseFileDialog(dialog_name="Select Audio File")
+        file_dialog = ChooseFileDialog(
+            plugin=self.plugin_base, dialog_name="Select Audio File"
+        )
 
         print(file_dialog.selected_file)
 

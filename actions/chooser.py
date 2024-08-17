@@ -2,11 +2,11 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, GLib, Gio, GObject
-
+from typing import Any
 
 # Import globals
 import globals as gl
+from gi.repository import Gio, GLib, GObject, Gtk
 
 
 class FilterList(GObject.GObject, Gio.ListModel):
@@ -16,12 +16,13 @@ class FilterList(GObject.GObject, Gio.ListModel):
 class ChooseFileDialog(Gtk.FileDialog):
     def __init__(
         self,
+        plugin: Any,
         dialog_name: str = "File Chooser",
         filetypes: list[str] = ["audio/mpeg", "audio/vnd.wav"],
     ):
         super().__init__(
             title=dialog_name,
-            accept_label=gl.lm.get("action.generic.select"),
+            accept_label=plugin.lm.get("action.generic.select"),
             filters=self.add_filters(filetypes=filetypes),
         )
 
