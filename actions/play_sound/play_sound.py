@@ -31,11 +31,14 @@ class PlaySoundAction(SoundActionBase):
 
     @property
     def mode(self) -> Mode:
-        v = self._get_property(key="mode")
-        print(v, type(v))
-        return Mode(
-            self._get_property(key="mode", default=Mode.PRESS.value, enforce_type=str)
-        )
+        try:
+            return Mode(
+                self._get_property(
+                    key="mode", default=Mode.PRESS.value, enforce_type=str
+                )
+            )
+        except ValueError:
+            return Mode.PRESS
 
     @mode.setter
     def mode(self, value: Mode):
