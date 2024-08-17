@@ -8,6 +8,7 @@ from typing import Any
 # Import globals
 import globals as gl
 from gi.repository import Gio, GLib, GObject, Gtk
+from collections.abc import Callable
 
 
 class FilterList(GObject.GObject, Gio.ListModel):
@@ -19,6 +20,7 @@ class ChooseFileDialog(Gtk.FileDialog):
         self,
         plugin: Any,
         dialog_name: str = "File Chooser",
+        setter_func: Callable | None = None,
         filetypes: list[str] = ["audio/mpeg", "audio/vnd.wav"],
     ):
         super().__init__(
@@ -27,15 +29,16 @@ class ChooseFileDialog(Gtk.FileDialog):
             # filters=self.add_filters(filetypes=filetypes),
         )
 
-        self.open(callback=self.callback)
-
         self.selected_file = None
+        self.setter_func = setter_func
+        self.open(callback=self.callback)
 
     def callback(self, dialog, result):
         selected_file = self.open_finish(result)
 
         self.selected_file = Path(selected_file.get_path())
-        print(self.selected_file)
+        if self.setter_func:
+            self.setter_func(self.selected_file)
 
     def add_filters(self, filetypes: list[str]):
         filter_text = Gtk.FileFilter()

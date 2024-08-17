@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from gi.repository import Adw, Gtk, Pango
 from GtkHelper.GtkHelper import ComboRow, ScaleRow
 
@@ -113,9 +115,14 @@ class PlaySoundAction(SoundActionBase):
 
         return base
 
+    def _set_filepath(self, result: Path):
+        self.filepath = str(result)
+
     def on_filepath_browse_click(self, entry):
         file_dialog = ChooseFileDialog(
-            plugin=self.plugin_base, dialog_name="Select Audio File"
+            plugin=self.plugin_base,
+            dialog_name="Select Audio File",
+            setter_func=self._set_filepath,
         )
 
         self.filepath = file_dialog.selected_file or ""
