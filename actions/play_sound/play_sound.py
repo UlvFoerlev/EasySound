@@ -58,12 +58,12 @@ class PlaySoundAction(SoundActionBase):
         )
         self.volume_scale.scale.set_draw_value(True)
 
-        self.mode_dropdown = Gtk.DropDown([Mode.PRESS, Mode.RELEASE])
+        # self.mode_dropdown = Gtk.DropDown([Mode.PRESS, Mode.RELEASE])
 
         # Connect entries
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
         self.filepath_input.connect("notify::text", self.on_filepath_change)
-        self.mode_dropdown.connect("notify::selected-item", self.on_select_mode)
+        # self.mode_dropdown.connect("notify::selected-item", self.on_select_mode)
         self.volume_scale.adjustment.connect(
             "value-changed", self.on_volume_scale_change
         )
