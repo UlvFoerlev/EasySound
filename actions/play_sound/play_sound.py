@@ -29,7 +29,7 @@ class PlaySoundAction(SoundActionBase):
     @property
     def mode(self) -> Mode:
         return Mode(
-            self._get_property(key="mode", default=Mode.PRESS, enforce_type=str)
+            self._get_property(key="mode", default=Mode.PRESS, enforce_type=Mode)
         )
 
     @mode.setter

@@ -1,10 +1,10 @@
-from enum import Flag
+from enum import Enum
 
 
-class Mode(Flag):
+class Mode(str, Enum):
     PRESS = "Press"
     RELEASE = "Release"
-    # HOLD = "Hold"
+    HOLD = "Hold"
 
 
 # MODES = [
