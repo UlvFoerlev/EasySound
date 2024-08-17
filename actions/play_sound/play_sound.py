@@ -74,8 +74,8 @@ class PlaySoundAction(SoundActionBase):
 
         self.dropdown_option.clear()
         for mode in Mode:
-            self.dropdown_option.append([mode.value])
-            self.dropdown_name.append([mode.value])
+            self.dropdown_option.append([mode, mode.value])
+            self.dropdown_name.append([mode, mode.value])
 
         self.mode_cell_renderer = Gtk.CellRendererText(
             ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
@@ -83,8 +83,9 @@ class PlaySoundAction(SoundActionBase):
         self.mode_row.combo_box.pack_start(self.mode_cell_renderer, True)
         self.mode_row.combo_box.add_attribute(self.mode_cell_renderer, "text", 0)
 
-        # Connect entries
+        self.mode_row.combo_box.set_entry_text_column(Mode.PRESS)
 
+        # Connect entries
         self.mode_row.combo_box.connect("changed", self.on_select_mode)
 
         base.append(self.mode_row)
