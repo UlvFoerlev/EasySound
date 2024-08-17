@@ -134,7 +134,7 @@ class PlaySoundAction(SoundActionBase):
         self.volume = entry.get_value()
 
     def on_select_mode(self, mode):
-        print(mode, mode.__dir__())
+        print(mode, mode.__dir__(), mode.get_active())
         self.mode = mode
 
     def on_key_down(self):
