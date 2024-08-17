@@ -154,6 +154,6 @@ class PlaySoundAction(SoundActionBase):
         if self.filepath and self.mode in {Mode.PRESS, Mode.HOLD}:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
 
-    def on_key_release(self):
+    def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
