@@ -23,7 +23,7 @@ class ChooseFileDialog(Gtk.FileDialog):
         super().__init__(
             title=dialog_name,
             accept_label=plugin.lm.get("action.generic.select"),
-            filters=self.add_filters(filetypes=filetypes),
+            # filters=self.add_filters(filetypes=filetypes),
         )
 
         self.open(callback=self.callback)
