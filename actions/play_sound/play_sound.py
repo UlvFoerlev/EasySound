@@ -39,6 +39,10 @@ class PlaySoundAction(SoundActionBase):
     def mode(self, value: Mode):
         self._set_property(key="mode", value=str(value))
 
+    @property
+    def mode_index(self) -> int:
+        return [x for x in Mode].index(self.mode)
+
     def setup_filebox(self, base):
         self.filebox_name = Gtk.ListStore.new([str])
         self.filebox = ComboRow(
@@ -83,7 +87,7 @@ class PlaySoundAction(SoundActionBase):
         self.mode_row.combo_box.pack_start(self.mode_cell_renderer, True)
         self.mode_row.combo_box.add_attribute(self.mode_cell_renderer, "text", 0)
 
-        self.mode_row.combo_box.set_active(0)
+        self.mode_row.combo_box.set_active(self.mode_index)
 
         # Connect entries
         self.mode_row.combo_box.connect("changed", self.on_select_mode)
