@@ -20,6 +20,7 @@ class PlaySoundAction(SoundActionBase):
     @filepath.setter
     def filepath(self, value: str):
         self._set_property(key="filepath", value=value)
+        self.filepath_input.set_text(self.filepath)
 
     @property
     def volume(self) -> float:
