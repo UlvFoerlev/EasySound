@@ -89,9 +89,9 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.filepath_browse)
         base.append(self.filepath_input)
         base.append(self.volume_scale)
-        # base.append(self.device_row.combo_box)
+        base.append(self.device_row.combo_box)
 
-        return [base, self.device_row.combo_box]
+        return [self.device_row.combo_box]
 
     def on_filepath_browse_click(self, entry):
         file_dialog = ChooseFileDialog(dialog_name="Select Audio File")
