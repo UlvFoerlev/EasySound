@@ -19,6 +19,9 @@ class PlaySoundAction(SoundActionBase):
 
     @filepath.setter
     def filepath(self, value: str):
+        if not isinstance(value, str):
+            value = ""
+
         self._set_property(key="filepath", value=value)
         self.filepath_input.set_text(self.filepath)
 
