@@ -31,7 +31,8 @@ class PlaySoundAction(SoundActionBase):
 
     @property
     def mode(self) -> Mode:
-        print(self._get_property(key="mode"))
+        v = self._get_property(key="mode")
+        print(v, type(v))
         return Mode(
             self._get_property(key="mode", default=Mode.PRESS.value, enforce_type=str)
         )
