@@ -33,7 +33,7 @@ class ChooseFileDialog(Gtk.FileDialog):
         print("Callback")
         print(dialog)
         print(result)
-        selected_file = result.get_task_data()
+        selected_file = result.return_value()
         print(selected_file)
 
         self.selected_file = selected_file
