@@ -38,6 +38,10 @@ class PlaySoundAction(SoundActionBase):
         self._set_property(key="mode", value=str(value))
 
     def setup_filebox(self, base):
+        self.filebox = ComboRow(
+            title=self.plugin_base.lm.get("action.play-sound.filepath"),
+        )
+
         self.filepath_browse = Gtk.Button.new_with_label(
             self.plugin_base.lm.get("action.play-sound.browse")
         )
@@ -51,8 +55,10 @@ class PlaySoundAction(SoundActionBase):
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
         self.filepath_input.connect("notify::text", self.on_filepath_change)
 
-        base.append(self.filepath_browse)
-        base.append(self.filepath_input)
+        self.filebox.append(self.filepath_input)
+        self.filebox.append(self.filepath_browse)
+
+        base.append(self.filebox)
 
     def setup_modebox(self, base):
         self.dropdown_option = Gtk.ListStore.new([str])  # First Column: Name,
