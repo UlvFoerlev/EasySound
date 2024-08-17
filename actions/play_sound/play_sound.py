@@ -60,7 +60,7 @@ class PlaySoundAction(SoundActionBase):
 
         dropdown_options = Gtk.ListStore(str)
         for option in Mode:
-            dropdown_options.append(option)
+            dropdown_options.append((option))
 
         self.mode_dropdown = Gtk.DropDown()
         self.mode_dropdown.set_model(dropdown_options)
