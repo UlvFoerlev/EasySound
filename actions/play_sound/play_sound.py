@@ -1,5 +1,5 @@
-from gi.repository import Adw, Gtk
-from GtkHelper.GtkHelper import ComboRow, ScaleRow, Pango
+from gi.repository import Adw, Gtk, Pango
+from GtkHelper.GtkHelper import ComboRow, ScaleRow
 
 from ..chooser import ChooseFileDialog
 from ..modes import Mode
