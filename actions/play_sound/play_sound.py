@@ -42,7 +42,6 @@ class PlaySoundAction(SoundActionBase):
 
     @mode.setter
     def mode(self, value: Mode):
-        print(value, str(value.value))
         self._set_property(key="mode", value=str(value.value))
 
     @property
@@ -152,7 +151,7 @@ class PlaySoundAction(SoundActionBase):
         self.mode = mode
 
     def on_key_down(self):
-        if self.filepath and Mode.PRESS == self.mode:
+        if self.filepath and self.mode in {Mode.Press, Mode.Hold}:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
 
     def on_key_release(self):
