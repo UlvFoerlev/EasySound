@@ -42,7 +42,7 @@ class PlaySoundAction(SoundActionBase):
     def setup_filebox(self, base):
         self.filebox_name = Gtk.ListStore.new([str])
         self.filebox = ComboRow(
-            title=self.plugin_base.lm.get("action.play-sound.filepath"),
+            title=self.plugin_base.lm.get("action.play-sound.sound_file"),
             model=self.filebox_name,
         )
 
@@ -51,7 +51,7 @@ class PlaySoundAction(SoundActionBase):
         )
 
         self.filepath_input = Adw.EntryRow(
-            title=self.plugin_base.lm.get("action.play-sound.sound_file")
+            title=self.plugin_base.lm.get("action.play-sound.filepath")
         )
 
         self.filepath_input.set_text(self.filepath)
@@ -74,8 +74,8 @@ class PlaySoundAction(SoundActionBase):
 
         self.dropdown_option.clear()
         for mode in Mode:
-            self.dropdown_option.append([str(mode)])
-            self.dropdown_name.append([str(mode)])
+            self.dropdown_option.append([mode.value])
+            self.dropdown_name.append([mode.value])
 
         self.mode_cell_renderer = Gtk.CellRendererText(
             ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
