@@ -54,7 +54,7 @@ class PlaySoundAction(SoundActionBase):
         )
 
         self.filepath_input = Adw.EntryRow(
-            title=self.plugin_base.lm.get("action.play-sound.filepath")
+            title=self.plugin_base.lm.get("action.play-sound.sound_file")
         )
 
         self.filepath_input.set_text(self.filepath)
