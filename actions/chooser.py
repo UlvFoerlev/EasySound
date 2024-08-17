@@ -31,11 +31,9 @@ class ChooseFileDialog(Gtk.FileDialog):
         self.selected_file = None
 
     def callback(self, dialog, result):
-        print("Callback")
-        print(dialog)
-        print(result)
         selected_file = self.open_finish(result)
         print(selected_file)
+        print(selected_file.__dir__())
 
         self.selected_file = selected_file
 
