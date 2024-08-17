@@ -57,8 +57,8 @@ class PlaySoundAction(SoundActionBase):
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
         self.filepath_input.connect("notify::text", self.on_filepath_change)
 
-        self.filebox.append(self.filepath_input)
-        self.filebox.append(self.filepath_browse)
+        self.filebox.main_box.append(self.filepath_input)
+        self.filebox.main_box.append(self.filepath_browse)
 
         base.append(self.filebox)
 
