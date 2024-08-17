@@ -2,6 +2,7 @@
     "action.play-sound.name": "Play Sound",
     "action.play-sound.filepath": "Sound File",
     "action.play-sound.browse": "Browse",
+    "action.play-sound.select_mode": "Select Mode",
     "action.generic.cancel": "Cancel",
     "action.generic.select": "Select",
     "action.generic.volume": "Volume"

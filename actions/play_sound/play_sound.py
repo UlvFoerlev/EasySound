@@ -1,8 +1,9 @@
-from ..sound_action_base import SoundActionBase
 from gi.repository import Adw, Gtk
-from GtkHelper.GtkHelper import ScaleRow
+from GtkHelper.GtkHelper import ComboRow, ScaleRow
+
 from ..chooser import ChooseFileDialog
 from ..modes import Mode
+from ..sound_action_base import SoundActionBase
 
 
 class PlaySoundAction(SoundActionBase):
@@ -58,12 +59,12 @@ class PlaySoundAction(SoundActionBase):
         )
         self.volume_scale.scale.set_draw_value(True)
 
-        dropdown_options = Gtk.ListStore(str)
-        for option in Mode:
-            dropdown_options.append((option))
+        self.mode_options = Gtk.ListStore.new([x for x in Mode])
 
-        self.mode_dropdown = Gtk.DropDown()
-        self.mode_dropdown.set_model(dropdown_options)
+        self.mode_dropdown = ComboRow(
+            title=self.plugin_base.lm.get("actions.play-sound.select_mode"),
+            model=self.mode_options,
+        )
 
         # Connect entries
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
