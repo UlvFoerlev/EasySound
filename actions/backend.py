@@ -18,7 +18,7 @@ class Backend(BackendBase):
 
         self.cached_sounds[key] = pg.mixer.Sound(path)
 
-    def play_sound(self, path: str | Path, volume: float = 100.0):
+    def play_sound(self, path: str | Path, volume: float = 100.0, loops: int = 0):
         key = path if isinstance(path, str) else str(path)
 
         if key not in self.cached_sounds:
@@ -27,7 +27,9 @@ class Backend(BackendBase):
         sound = self.cached_sounds[key]
         real_volume = max(min((volume / 100.0), 1.0), 0.0)
         sound.set_volume(real_volume)
-        sound.play()
+        channel = sound.play(loops=loops)
+
+        return sound, channel
 
 
 backend = Backend()
