@@ -30,11 +30,7 @@ class ChooseFileDialog(Gtk.FileDialog):
         self.selected_file = None
 
     def callback(self, dialog, result):
-        try:
-            selected_file = self.open_finish(result)
-        except GLib.Error:
-            self.selected_file = None
-            return
+        selected_file = self.open_finish(result)
 
         self.selected_file = selected_file
 
