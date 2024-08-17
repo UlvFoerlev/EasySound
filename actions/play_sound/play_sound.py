@@ -65,7 +65,7 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.filebox)
 
     def setup_modebox(self, base):
-        self.dropdown_option = Gtk.ListStore.new([Mode, str])
+        self.dropdown_option = Gtk.ListStore.new([str])
         self.dropdown_name = Gtk.ListStore.new([str])
         self.mode_row = ComboRow(
             title=self.plugin_base.lm.get("action.play-sound.select_mode"),
@@ -74,7 +74,7 @@ class PlaySoundAction(SoundActionBase):
 
         self.dropdown_option.clear()
         for mode in Mode:
-            self.dropdown_option.append([mode, mode.value])
+            self.dropdown_option.append([mode.value])
             self.dropdown_name.append([mode.value])
 
         self.mode_cell_renderer = Gtk.CellRendererText(
@@ -82,8 +82,6 @@ class PlaySoundAction(SoundActionBase):
         )
         self.mode_row.combo_box.pack_start(self.mode_cell_renderer, True)
         self.mode_row.combo_box.add_attribute(self.mode_cell_renderer, "text", 0)
-
-        self.mode_row.combo_box.set_entry_text_column(Mode.PRESS.value)
 
         # Connect entries
         self.mode_row.combo_box.connect("changed", self.on_select_mode)
