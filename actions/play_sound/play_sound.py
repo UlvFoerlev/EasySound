@@ -59,7 +59,7 @@ class PlaySoundAction(SoundActionBase):
         )
         self.volume_scale.scale.set_draw_value(True)
 
-        self.mode_options = Gtk.ListStore.new([x for x in Mode])
+        self.mode_options = Gtk.ListStore.new([str(x) for x in Mode])
 
         self.mode_dropdown = ComboRow(
             title=self.plugin_base.lm.get("actions.play-sound.select_mode"),
