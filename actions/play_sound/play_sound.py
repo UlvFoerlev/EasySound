@@ -61,7 +61,7 @@ class PlaySoundAction(SoundActionBase):
 
         self.dropdown_option = Gtk.ListStore.new([str])  # First Column: Name,
         self.dropdown_name = Gtk.ListStore.new([str])
-        self.device_row = ComboRow(
+        self.mode_row = ComboRow(
             title=self.plugin_base.lm.get("action.play-sound.select_mode"),
             model=self.dropdown_name,
         )
@@ -71,10 +71,13 @@ class PlaySoundAction(SoundActionBase):
             self.dropdown_option.append([str(mode)])
             self.dropdown_name.append([str(mode)])
 
+        self.mode_row.combo_box.pack_start(self.dropdown_cell_renderer, True)
+        self.mode_row.combo_box.add_attribute(self.dropdown_cell_renderer, "text", 0)
+
         # Connect entries
         self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
         self.filepath_input.connect("notify::text", self.on_filepath_change)
-        self.device_row.combo_box.connect("changed", self.on_select_mode)
+        self.mode_row.combo_box.connect("changed", self.on_select_mode)
         self.volume_scale.adjustment.connect(
             "value-changed", self.on_volume_scale_change
         )
@@ -84,10 +87,7 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.filepath_browse)
         base.append(self.filepath_input)
         base.append(self.volume_scale)
-        base.append(self.device_row.combo_box)
-
-        # self.device_row.combo_box.pack_start(self.dropdown_cell_renderer, True)
-        # self.device_row.combo_box.add_attribute(self.dropdown_cell_renderer, "text", 0)
+        base.append(self.mode_row.combo_box)
 
         return base
 
