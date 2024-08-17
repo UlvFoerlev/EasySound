@@ -1,0 +1,10 @@
+{
+    "action.play-sound.name": "Spil Lyd",
+    "action.play-sound.filepath": "Filsti",
+    "action.play-sound.sound_file": "Lydfil",
+    "action.play-sound.browse": "Gennemse",
+    "action.play-sound.select_mode": "Knap Effekt",
+    "action.generic.cancel": "Cancel",
+    "action.generic.select": "Vælg",
+    "action.generic.volume": "Lyd Niveau"
+}

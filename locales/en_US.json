@@ -3,7 +3,7 @@
     "action.play-sound.filepath": "Filepath",
     "action.play-sound.sound_file": "Sound File",
     "action.play-sound.browse": "Browse",
-    "action.play-sound.select_mode": "Select Mode",
+    "action.play-sound.select_mode": "Button Mode",
     "action.generic.cancel": "Cancel",
     "action.generic.select": "Select",
     "action.generic.volume": "Volume"
