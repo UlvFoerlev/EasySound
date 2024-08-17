@@ -133,8 +133,10 @@ class PlaySoundAction(SoundActionBase):
     def on_volume_scale_change(self, entry):
         self.volume = entry.get_value()
 
-    def on_select_mode(self, mode):
-        print(mode, mode.__dir__(), mode.get_active())
+    def on_select_mode(self, option):
+        mode_index = option.get_active()
+        mode = list(Mode)[mode_index]
+        print(mode)
         self.mode = mode
 
     def on_key_down(self):
