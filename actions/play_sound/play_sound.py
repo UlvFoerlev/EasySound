@@ -37,7 +37,7 @@ class PlaySoundAction(SoundActionBase):
     def mode(self, value: Mode):
         self._set_property(key="mode", value=str(value))
 
-    def get_config_rows(self):
+    def setup_filebox(self, base):
         self.filepath_browse = Gtk.Button.new_with_label(
             self.plugin_base.lm.get("action.play-sound.browse")
         )
@@ -48,17 +48,13 @@ class PlaySoundAction(SoundActionBase):
 
         self.filepath_input.set_text(self.filepath)
 
-        self.volume_scale = ScaleRow(
-            title=self.plugin_base.lm.get("action.generic.volume"),
-            value=self.volume,
-            min=0,
-            max=100,
-            step=1,
-            text_left="0",
-            text_right="100",
-        )
-        self.volume_scale.scale.set_draw_value(True)
+        self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
+        self.filepath_input.connect("notify::text", self.on_filepath_change)
 
+        base.append(self.filepath_browse)
+        base.append(self.filepath_input)
+
+    def setup_modebox(self, base):
         self.dropdown_option = Gtk.ListStore.new([str])  # First Column: Name,
         self.dropdown_name = Gtk.ListStore.new([str])
         self.mode_row = ComboRow(
@@ -78,19 +74,34 @@ class PlaySoundAction(SoundActionBase):
         self.mode_row.combo_box.add_attribute(self.dropdown_cell_renderer, "text", 0)
 
         # Connect entries
-        self.filepath_browse.connect("clicked", self.on_filepath_browse_click)
-        self.filepath_input.connect("notify::text", self.on_filepath_change)
+
         self.mode_row.combo_box.connect("changed", self.on_select_mode)
+
+        base.append(self.mode_row.combo_box)
+
+    def setup_volumebox(self, base):
+        self.volume_scale = ScaleRow(
+            title=self.plugin_base.lm.get("action.generic.volume"),
+            value=self.volume,
+            min=0,
+            max=100,
+            step=1,
+            text_left="0",
+            text_right="100",
+        )
+        self.volume_scale.scale.set_draw_value(True)
+
         self.volume_scale.adjustment.connect(
             "value-changed", self.on_volume_scale_change
         )
 
-        base = super().get_config_rows()
-
-        base.append(self.filepath_browse)
-        base.append(self.filepath_input)
         base.append(self.volume_scale)
-        base.append(self.mode_row.combo_box)
+
+    def get_config_rows(self):
+        base = super().get_config_rows()
+        self.setup_filebox(base=base)
+        self.setup_volumebox(base=base)
+        # self.setup_modebox(base=base)
 
         return base
 
