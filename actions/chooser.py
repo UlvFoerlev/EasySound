@@ -2,6 +2,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
+from pathlib import Path
 from typing import Any
 
 # Import globals
@@ -32,10 +33,8 @@ class ChooseFileDialog(Gtk.FileDialog):
 
     def callback(self, dialog, result):
         selected_file = self.open_finish(result)
-        print(selected_file)
-        print(selected_file.__dir__())
 
-        self.selected_file = selected_file
+        self.selected_file = Path(selected_file.get_path())
 
     def add_filters(self, filetypes: list[str]):
         filter_text = Gtk.FileFilter()

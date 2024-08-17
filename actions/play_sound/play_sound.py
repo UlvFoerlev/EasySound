@@ -118,8 +118,6 @@ class PlaySoundAction(SoundActionBase):
             plugin=self.plugin_base, dialog_name="Select Audio File"
         )
 
-        print(file_dialog.selected_file)
-
         self.filepath = file_dialog.selected_file or ""
 
     def on_filepath_change(self, entry, _):
