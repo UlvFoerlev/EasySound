@@ -77,6 +77,8 @@ class PlaySoundAction(SoundActionBase):
             self.dropdown_option.append([mode.value])
             self.dropdown_name.append([mode.value])
 
+        self.mode_row.combo_box.set_entry_text_column(0)
+
         self.mode_cell_renderer = Gtk.CellRendererText(
             ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
         )
@@ -136,7 +138,7 @@ class PlaySoundAction(SoundActionBase):
     def on_select_mode(self, option):
         mode_index = option.get_active()
         mode = list(Mode)[mode_index]
-        print(mode)
+
         self.mode = mode
 
     def on_key_down(self):
