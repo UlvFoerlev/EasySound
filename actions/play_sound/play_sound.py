@@ -78,6 +78,7 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.filepath_browse)
         base.append(self.filepath_input)
         base.append(self.volume_scale)
+        base.append(self.mode_dropdown)
 
         return base
 
