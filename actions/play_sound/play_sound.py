@@ -71,6 +71,9 @@ class PlaySoundAction(SoundActionBase):
             self.dropdown_option.append([str(mode)])
             self.dropdown_name.append([str(mode)])
 
+        self.mode_cell_renderer = Gtk.CellRendererText(
+            ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
+        )
         self.mode_row.combo_box.pack_start(self.dropdown_cell_renderer, True)
         self.mode_row.combo_box.add_attribute(self.dropdown_cell_renderer, "text", 0)
 
