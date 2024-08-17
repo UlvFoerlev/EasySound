@@ -40,8 +40,6 @@ class PluginEasySound(PluginBase):
         backend_path = Path(__file__).parent / "actions" / "backend.py"
         venv_path = Path(__file__).parent / ".venv"
 
-        print(backend_path)
-
         self.launch_backend(
             backend_path=backend_path, open_in_terminal=False, venv_path=venv_path
         )
