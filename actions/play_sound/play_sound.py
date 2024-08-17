@@ -83,7 +83,7 @@ class PlaySoundAction(SoundActionBase):
         self.mode_row.combo_box.pack_start(self.mode_cell_renderer, True)
         self.mode_row.combo_box.add_attribute(self.mode_cell_renderer, "text", 0)
 
-        self.mode_row.combo_box.set_entry_text_column(1)
+        self.mode_row.combo_box.set_entry_text_column(Mode.PRESS.value)
 
         # Connect entries
         self.mode_row.combo_box.connect("changed", self.on_select_mode)
