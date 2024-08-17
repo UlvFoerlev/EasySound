@@ -20,7 +20,6 @@ class Backend(BackendBase):
 
     def play_sound(self, path: str | Path, volume: float = 100.0):
         key = path if isinstance(path, str) else str(path)
-        print(path, key)
 
         if key not in self.cached_sounds:
             self.cache_sound(path=path)

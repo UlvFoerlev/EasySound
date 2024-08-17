@@ -114,7 +114,7 @@ class PlaySoundAction(SoundActionBase):
         base = super().get_config_rows()
         self.setup_filebox(base=base)
         self.setup_volumebox(base=base)
-        # self.setup_modebox(base=base)
+        self.setup_modebox(base=base)
 
         return base
 
