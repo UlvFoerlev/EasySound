@@ -9,9 +9,6 @@ from ..sound_action_base import SoundActionBase
 
 
 class PlaySoundAction(SoundActionBase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     @property
     def filepath(self) -> str:
         val = self._get_property(key="filepath", default="", enforce_type=str)
@@ -68,7 +65,7 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.filebox)
 
     def setup_modebox(self, base):
-        self.dropdown_option = Gtk.ListStore.new([str])  # First Column: Name,
+        self.dropdown_option = Gtk.ListStore.new([str])
         self.dropdown_name = Gtk.ListStore.new([str])
         self.mode_row = ComboRow(
             title=self.plugin_base.lm.get("action.play-sound.select_mode"),
@@ -90,7 +87,7 @@ class PlaySoundAction(SoundActionBase):
 
         self.mode_row.combo_box.connect("changed", self.on_select_mode)
 
-        base.append(self.mode_row.combo_box)
+        base.append(self.mode_row)
 
     def setup_volumebox(self, base):
         self.volume_scale = ScaleRow(
