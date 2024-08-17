@@ -38,8 +38,10 @@ class PlaySoundAction(SoundActionBase):
         self._set_property(key="mode", value=str(value))
 
     def setup_filebox(self, base):
+        self.filebox_name = Gtk.ListStore.new([str])
         self.filebox = ComboRow(
             title=self.plugin_base.lm.get("action.play-sound.filepath"),
+            model=self.filebox_name,
         )
 
         self.filepath_browse = Gtk.Button.new_with_label(
