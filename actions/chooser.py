@@ -35,6 +35,7 @@ class ChooseFileDialog(Gtk.FileDialog):
         selected_file = self.open_finish(result)
 
         self.selected_file = Path(selected_file.get_path())
+        print(self.selected_file)
 
     def add_filters(self, filetypes: list[str]):
         filter_text = Gtk.FileFilter()
