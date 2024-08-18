@@ -31,7 +31,7 @@ class ChooseFileDialog(Gtk.FileDialog):
         )
 
         if start_path:
-            self.set_current_folder(str(start_path))
+            print(self.__dir__())
 
         self.selected_file = None
         self.setter_func = setter_func
