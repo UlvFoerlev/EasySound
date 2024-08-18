@@ -6,9 +6,15 @@ from GtkHelper.GtkHelper import ComboRow, ScaleRow
 from ..chooser import ChooseFileDialog
 from ..modes import Mode
 from ..sound_action_base import SoundActionBase
+from pygame.mixer import Channel
 
 
 class PlaySoundAction(SoundActionBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.looping_channel: Channel | None = None
+
     @property
     def filepath(self) -> str:
         val = self._get_property(key="filepath", default="", enforce_type=str)
@@ -141,12 +147,16 @@ class PlaySoundAction(SoundActionBase):
     def on_filepath_change(self, entry, _):
         self.filepath = entry.get_text()
 
+        self.stop_looping()
+
     def on_volume_scale_change(self, entry):
         self.volume = entry.get_value()
 
     def on_select_mode(self, option):
         mode_index = option.get_active()
         mode = list(Mode)[mode_index]
+
+        self.stop_looping()
 
         self.mode = mode
 
@@ -157,11 +167,24 @@ class PlaySoundAction(SoundActionBase):
                     path=self.filepath, volume=self.volume
                 )
             elif self.mode == Mode.HOLD:
-                sound, channel = self.plugin_base.backend.play_sound(
+                self.stop_looping()
+
+                _, channel = self.plugin_base.backend.play_sound(
                     path=self.filepath, volume=self.volume, loops=-1
                 )
-                print(sound, channel)
+
+                self.looping_channel = channel
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
+
+        if self.mode == Mode.HOLD and self.looping_channel is not None:
+            self.stop_looping()
+
+    def stop_looping(self):
+        if self.looping_channel is None:
+            return
+
+        self.looping_channel.stop()
+        self.looping_channel = None
