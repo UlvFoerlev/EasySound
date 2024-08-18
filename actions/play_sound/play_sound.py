@@ -6,14 +6,13 @@ from GtkHelper.GtkHelper import ComboRow, ScaleRow
 from ..chooser import ChooseFileDialog
 from ..modes import Mode
 from ..sound_action_base import SoundActionBase
-from pygame.mixer import Channel
 
 
 class PlaySoundAction(SoundActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.looping_channel: Channel | None = None
+        self.looping_channel = None
 
     @property
     def filepath(self) -> str:
