@@ -135,18 +135,10 @@ class PlaySoundAction(SoundActionBase):
         self.filepath_input.set_text(self.filepath)
 
     def on_filepath_browse_click(self, entry):
-        filepath = None
-        if self.filepath:
-            try:
-                filepath = Path(self.filepath).parent
-            except ValueError:
-                pass
-
         file_dialog = ChooseFileDialog(
             plugin=self.plugin_base,
             dialog_name="Select Audio File",
             setter_func=self._set_filepath,
-            start_path=filepath,
         )
 
         self.filepath = file_dialog.selected_file or ""

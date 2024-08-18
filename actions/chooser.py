@@ -21,7 +21,6 @@ class ChooseFileDialog(Gtk.FileDialog):
         plugin: Any,
         dialog_name: str = "File Chooser",
         setter_func: Callable | None = None,
-        start_path: Path | None = None,
         filetypes: list[str] = ["audio/mpeg", "audio/vnd.wav"],
     ):
         super().__init__(
@@ -29,9 +28,6 @@ class ChooseFileDialog(Gtk.FileDialog):
             accept_label=plugin.lm.get("action.generic.select"),
             # filters=self.add_filters(filetypes=filetypes),
         )
-
-        if start_path:
-            self.set_initial_folder(Gio.File.new_for_path(str(start_path)))
 
         self.selected_file = None
         self.setter_func = setter_func
