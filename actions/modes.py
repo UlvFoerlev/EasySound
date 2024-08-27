@@ -5,4 +5,6 @@ class Mode(str, Enum):
     PRESS = "Press"
     RELEASE = "Release"
     HOLD = "Hold"
-    PLAY_TILL_STOPPED = "Play till Stopped"
+    TURN_ON = "Turn On"
+    TURN_OFF = "Turn OFF"
+    PLAY_TILL_TURNED_OFF = "Play until Turned Off"

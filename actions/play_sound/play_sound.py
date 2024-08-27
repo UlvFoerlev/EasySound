@@ -13,6 +13,7 @@ class PlaySoundAction(SoundActionBase):
         super().__init__(*args, **kwargs)
 
         self.looping_channel = None
+        self.active = False
 
     @property
     def filepath(self) -> str:
@@ -208,15 +209,36 @@ class PlaySoundAction(SoundActionBase):
         self.mode = mode
 
     def on_key_down(self):
-        if self.filepath:
-            if self.mode == Mode.PRESS:
+        if not self.filepath:
+            return
+
+        self.active = not self.active
+
+        match self.mode:
+            case Mode.Press:
                 self.plugin_base.backend.play_sound(
                     path=self.filepath,
                     volume=self.volume,
                     fade_in=self.fade_in,
                     immediate_fade_out=self.fade_out,
                 )
-            elif self.mode == Mode.HOLD:
+            case Mode.TURN_ON:
+                if self.active:
+                    self.plugin_base.backend.play_sound(
+                        path=self.filepath,
+                        volume=self.volume,
+                        fade_in=self.fade_in,
+                        immediate_fade_out=self.fade_out,
+                    )
+            case Mode.TURN_OFF:
+                if not self.active:
+                    self.plugin_base.backend.play_sound(
+                        path=self.filepath,
+                        volume=self.volume,
+                        fade_in=self.fade_in,
+                        immediate_fade_out=self.fade_out,
+                    )
+            case Mode.HOLD:
                 self.stop_looping()
 
                 _, channel = self.plugin_base.backend.play_sound(
@@ -227,9 +249,8 @@ class PlaySoundAction(SoundActionBase):
                 )
 
                 self.looping_channel = channel
-
-            elif self.mode == Mode.PLAY_TILL_STOPPED:
-                if self.looping_channel is None:
+            case Mode.PLAY_TILL_TURNED_OFF:
+                if self.active:
                     _, channel = self.plugin_base.backend.play_sound(
                         path=self.filepath,
                         volume=self.volume,
@@ -238,7 +259,7 @@ class PlaySoundAction(SoundActionBase):
                     )
 
                     self.looping_channel = channel
-                else:
+                elif not self.active:
                     self.stop_looping(fadeout=self.fade_out)
 
     def on_key_up(self):
