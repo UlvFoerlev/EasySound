@@ -227,6 +227,7 @@ class PlaySoundAction(SoundActionBase):
                 )
 
                 self.looping_channel = channel
+
             elif self.mode == Mode.PLAY_TILL_STOPPED:
                 if self.looping_channel is None:
                     _, channel = self.plugin_base.backend.play_sound(
@@ -238,26 +239,26 @@ class PlaySoundAction(SoundActionBase):
 
                     self.looping_channel = channel
                 else:
-                    self.stop_looping()
+                    self.stop_looping(fadeout=self.fade_out)
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
 
         if self.mode == Mode.HOLD and self.looping_channel is not None:
-            self.stop_looping()
+            self.stop_looping(fadeout=self.fade_out)
 
     def on_fade_change(self, *args):
         self.fade_in = round(self.fade_in_row.get_value(), 1)
         self.fade_out = round(self.fade_out_row.get_value(), 1)
 
-    def stop_looping(self):
+    def stop_looping(self, fadeout: float = 0.0):
         if self.looping_channel is None:
             return
 
         if not self.fade_out:
             self.looping_channel.stop()
         else:
-            self.looping_channel.fadeout(int(self.fade_out * 1000))
+            self.looping_channel.fadeout(int(fadeout * 1000))
 
         self.looping_channel = None
