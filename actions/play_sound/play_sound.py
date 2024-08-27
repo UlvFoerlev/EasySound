@@ -214,7 +214,7 @@ class PlaySoundAction(SoundActionBase):
                     path=self.filepath,
                     volume=self.volume,
                     fade_in=self.fade_in,
-                    fade_out=self.fade_out,
+                    immediate_fade_out=self.fade_out,
                 )
             elif self.mode == Mode.HOLD:
                 self.stop_looping()
