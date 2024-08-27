@@ -215,7 +215,7 @@ class PlaySoundAction(SoundActionBase):
         self.active = not self.active
 
         match self.mode:
-            case Mode.Press:
+            case Mode.PRESS:
                 self.plugin_base.backend.play_sound(
                     path=self.filepath,
                     volume=self.volume,
