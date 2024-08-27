@@ -2,17 +2,13 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 # Import globals
 import globals as gl
 from gi.repository import Gio, GLib, GObject, Gtk
-from collections.abc import Callable
-
-
-class FilterList(GObject.GObject, Gio.ListModel):
-    pass
 
 
 class ChooseFileDialog(Gtk.FileDialog):
@@ -26,7 +22,7 @@ class ChooseFileDialog(Gtk.FileDialog):
         super().__init__(
             title=dialog_name,
             accept_label=plugin.lm.get("action.generic.select"),
-            # filters=self.add_filters(filetypes=filetypes),
+            filters=self.add_filters(filetypes=filetypes),
         )
 
         self.selected_file = None

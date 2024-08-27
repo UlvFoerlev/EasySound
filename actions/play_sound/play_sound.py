@@ -173,6 +173,16 @@ class PlaySoundAction(SoundActionBase):
                 )
 
                 self.looping_channel = channel
+            elif self.mode == Mode.PLAY_TILL_STOPPED:
+                if self.looping_channel is None:
+                    _, channel = self.plugin_base.backend.play_sound(
+                        path=self.filepath, volume=self.volume, loops=-1
+                    )
+
+                    self.looping_channel = channel
+                else:
+                    self.looping_channel.stop()
+                    self.looping_channel = None
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
