@@ -150,6 +150,7 @@ class PlaySoundAction(SoundActionBase):
         self.setup_filebox(base=base)
         self.setup_volumebox(base=base)
         self.setup_modebox(base=base)
+        self.setup_fade_box(base=base)
 
         return base
 
