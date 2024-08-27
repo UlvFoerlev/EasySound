@@ -140,7 +140,7 @@ class PlaySoundAction(SoundActionBase):
 
     def setup_fade_box(self, base):
         # FADE IN
-        self.fade_in_row = Adw.SpinRow().new_with_range(min=0, max=10, step=0.1)
+        self.fade_in_row = Adw.SpinRow().new_with_range(min=0, max=10, step=0.05)
         self.fade_in_row.set_title(
             self.plugin_base.lm.get("action.play-sound.fade-in.title")
         )
@@ -151,7 +151,7 @@ class PlaySoundAction(SoundActionBase):
         self.fade_in_row.set_value(self.fade_in)
 
         # FADE OUT
-        self.fade_out_row = Adw.SpinRow().new_with_range(min=0, max=10, step=0.1)
+        self.fade_out_row = Adw.SpinRow().new_with_range(min=0, max=10, step=0.05)
         self.fade_out_row.set_title(
             self.plugin_base.lm.get("action.play-sound.fade-out.title")
         )
@@ -249,8 +249,8 @@ class PlaySoundAction(SoundActionBase):
             self.stop_looping(fadeout=self.fade_out)
 
     def on_fade_change(self, *args):
-        self.fade_in = round(self.fade_in_row.get_value(), 1)
-        self.fade_out = round(self.fade_out_row.get_value(), 1)
+        self.fade_in = round(self.fade_in_row.get_value(), 2)
+        self.fade_out = round(self.fade_out_row.get_value(), 2)
 
     def stop_looping(self, fadeout: float = 0.0):
         if self.looping_channel is None:
