@@ -4,6 +4,10 @@
     "action.play-sound.sound_file": "Sound File",
     "action.play-sound.browse": "Browse",
     "action.play-sound.select_mode": "Button Mode",
+    "action.play-sound.fade-in.title": "Fade In",
+    "action.play-sound.fade-in.subtitle": "Fade sound in over n seconds.",
+    "action.play-sound.fade-out.title": "Fade Out",
+    "action.play-sound.fade-out.subtitle": "Fade sound out over n seconds. Will elongate the sound.",
     "action.generic.cancel": "Cancel",
     "action.generic.select": "Select",
     "action.generic.volume": "Volume"

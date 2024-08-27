@@ -35,6 +35,14 @@ class PlaySoundAction(SoundActionBase):
         self._set_property(key="volume", value=value)
 
     @property
+    def fade_in(self) -> float:
+        return self._get_property(key="fade_in", default=0.0, enforce_type=float)
+
+    @fade_in.setter
+    def fade_in(self, value: float):
+        self._set_property(key="fade_in", value=value)
+
+    @property
     def mode(self) -> Mode:
         try:
             return Mode(
@@ -122,6 +130,21 @@ class PlaySoundAction(SoundActionBase):
 
         base.append(self.volume_scale)
 
+    def setup_fade_box(self, base):
+        self.fade_in_row = Adw.SpinRow().new_with_range(min=0, max=10, step=0.1)
+        self.fade_in_row.set_title(
+            self.plugin_base.lm.get("action.play-sound.fade-in.title")
+        )
+        self.fade_in_row.set_subtitle(
+            self.plugin_base.lm.get("action.play-sound.fade-in.subtitle")
+        )
+
+        self.fade_in_row.set_value(self.fade_in)
+
+        self.fade_in_row.connect("changed", self.on_fade_in_change)
+
+        base.append(self.fade_in_row)
+
     def get_config_rows(self):
         base = super().get_config_rows()
         self.setup_filebox(base=base)
@@ -190,6 +213,9 @@ class PlaySoundAction(SoundActionBase):
 
         if self.mode == Mode.HOLD and self.looping_channel is not None:
             self.stop_looping()
+
+    def on_fade_in_change(self, *args):
+        self.fade_in = round(self.fade_in_row.get_value(), 1)
 
     def stop_looping(self):
         if self.looping_channel is None:
