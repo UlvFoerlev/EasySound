@@ -220,14 +220,22 @@ class PlaySoundAction(SoundActionBase):
                 self.stop_looping()
 
                 _, channel = self.plugin_base.backend.play_sound(
-                    path=self.filepath, volume=self.volume, loops=-1
+                    path=self.filepath,
+                    volume=self.volume,
+                    loops=-1,
+                    fade_in=self.fade_in,
+                    fade_out=self.fade_out,
                 )
 
                 self.looping_channel = channel
             elif self.mode == Mode.PLAY_TILL_STOPPED:
                 if self.looping_channel is None:
                     _, channel = self.plugin_base.backend.play_sound(
-                        path=self.filepath, volume=self.volume, loops=-1
+                        path=self.filepath,
+                        volume=self.volume,
+                        loops=-1,
+                        fade_in=self.fade_in,
+                        fade_out=self.fade_out,
                     )
 
                     self.looping_channel = channel
