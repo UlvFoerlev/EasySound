@@ -35,7 +35,7 @@ class Backend(BackendBase):
         real_volume = max(min((volume / 100.0), 1.0), 0.0)
         sound.set_volume(real_volume)
         channel = sound.play(loops=loops, fade_ms=int(fade_in * 1000))
-        sound.fadeout(int(fade_in * 1000))
+        sound.fadeout(int(fade_out * 1000))
 
         return sound, channel
 

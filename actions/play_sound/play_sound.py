@@ -211,7 +211,10 @@ class PlaySoundAction(SoundActionBase):
         if self.filepath:
             if self.mode == Mode.PRESS:
                 self.plugin_base.backend.play_sound(
-                    path=self.filepath, volume=self.volume, fade_in=self.fade_in
+                    path=self.filepath,
+                    volume=self.volume,
+                    fade_in=self.fade_in,
+                    fade_out=self.fade_out,
                 )
             elif self.mode == Mode.HOLD:
                 self.stop_looping()
