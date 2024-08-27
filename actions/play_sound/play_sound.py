@@ -43,6 +43,14 @@ class PlaySoundAction(SoundActionBase):
         self._set_property(key="fade_in", value=value)
 
     @property
+    def fade_out(self) -> float:
+        return self._get_property(key="fade_out", default=0.0, enforce_type=float)
+
+    @fade_out.setter
+    def fade_out(self, value: float):
+        self._set_property(key="fade_out", value=value)
+
+    @property
     def mode(self) -> Mode:
         try:
             return Mode(
@@ -131,6 +139,7 @@ class PlaySoundAction(SoundActionBase):
         base.append(self.volume_scale)
 
     def setup_fade_box(self, base):
+        # FADE IN
         self.fade_in_row = Adw.SpinRow().new_with_range(min=0, max=10, step=0.1)
         self.fade_in_row.set_title(
             self.plugin_base.lm.get("action.play-sound.fade-in.title")
@@ -141,9 +150,24 @@ class PlaySoundAction(SoundActionBase):
 
         self.fade_in_row.set_value(self.fade_in)
 
-        self.fade_in_row.connect("changed", self.on_fade_in_change)
+        # FADE OUT
+        self.fade_out_row = Adw.SpinRow().new_with_range(min=0, max=10, step=0.1)
+        self.fade_out_row.set_title(
+            self.plugin_base.lm.get("action.play-sound.fade-out.title")
+        )
+        self.fade_out_row.set_subtitle(
+            self.plugin_base.lm.get("action.play-sound.fade-out.subtitle")
+        )
 
+        self.fade_out_row.set_value(self.fade_out)
+
+        # Attach Methods
+        self.fade_out_row.connect("changed", self.on_fade_change)
+        self.fade_in_row.connect("changed", self.on_fade_change)
+
+        # ADD to UI
         base.append(self.fade_in_row)
+        base.append(self.fade_out_row)
 
     def get_config_rows(self):
         base = super().get_config_rows()
@@ -205,8 +229,7 @@ class PlaySoundAction(SoundActionBase):
 
                     self.looping_channel = channel
                 else:
-                    self.looping_channel.stop()
-                    self.looping_channel = None
+                    self.stop_looping()
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
@@ -215,8 +238,9 @@ class PlaySoundAction(SoundActionBase):
         if self.mode == Mode.HOLD and self.looping_channel is not None:
             self.stop_looping()
 
-    def on_fade_in_change(self, *args):
+    def on_fade_change(self, *args):
         self.fade_in = round(self.fade_in_row.get_value(), 1)
+        self.fade_out = round(self.fade_out_row.get_value(), 1)
 
     def stop_looping(self):
         if self.looping_channel is None:
