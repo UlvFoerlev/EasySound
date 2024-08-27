@@ -224,7 +224,6 @@ class PlaySoundAction(SoundActionBase):
                     volume=self.volume,
                     loops=-1,
                     fade_in=self.fade_in,
-                    fade_out=self.fade_out,
                 )
 
                 self.looping_channel = channel
@@ -235,7 +234,6 @@ class PlaySoundAction(SoundActionBase):
                         volume=self.volume,
                         loops=-1,
                         fade_in=self.fade_in,
-                        fade_out=self.fade_out,
                     )
 
                     self.looping_channel = channel
@@ -257,5 +255,9 @@ class PlaySoundAction(SoundActionBase):
         if self.looping_channel is None:
             return
 
-        self.looping_channel.stop()
+        if not self.fade_out:
+            self.looping_channel.stop()
+        else:
+            self.looping_channel.fadeout(int(self.fade_out * 1000))
+
         self.looping_channel = None

@@ -24,7 +24,7 @@ class Backend(BackendBase):
         volume: float = 100.0,
         loops: int = 0,
         fade_in: float = 0.0,
-        fade_out: float = 0.0,
+        immediate_fade_out: float = 0.0,
     ):
         key = path if isinstance(path, str) else str(path)
 
@@ -35,7 +35,8 @@ class Backend(BackendBase):
         real_volume = max(min((volume / 100.0), 1.0), 0.0)
         sound.set_volume(real_volume)
         channel = sound.play(loops=loops, fade_ms=int(fade_in * 1000))
-        sound.fadeout(int(fade_out * 1000))
+        if immediate_fade_out:
+            sound.fadeout(int(immediate_fade_out * 1000))
 
         return sound, channel
 
