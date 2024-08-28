@@ -1,7 +1,8 @@
 from streamcontroller_plugin_tools import BackendBase
 from pathlib import Path
 import pygame as pg
-from pygame.mixer import Sound
+from pygame.mixer import Sound, Channel
+from .exceptions import InvalidSoundFileError
 
 
 class Backend(BackendBase):
@@ -16,7 +17,10 @@ class Backend(BackendBase):
     def cache_sound(self, path: str | Path):
         key = path if isinstance(path, str) else str(path)
 
-        self.cached_sounds[key] = pg.mixer.Sound(path)
+        try:
+            self.cached_sounds[key] = pg.mixer.Sound(path)
+        except pg.error:
+            raise InvalidSoundFileError(f"Invalid filetype {key}.")
 
     def play_sound(
         self,
@@ -25,11 +29,14 @@ class Backend(BackendBase):
         loops: int = 0,
         fade_in: float = 0.0,
         immediate_fade_out: float = 0.0,
-    ):
+    ) -> tuple[Sound | None, Channel | None]:
         key = path if isinstance(path, str) else str(path)
 
         if key not in self.cached_sounds:
-            self.cache_sound(path=path)
+            try:
+                self.cache_sound(path=path)
+            except InvalidSoundFileError:
+                return None, None
 
         sound = self.cached_sounds[key]
         real_volume = max(min((volume / 100.0), 1.0), 0.0)
