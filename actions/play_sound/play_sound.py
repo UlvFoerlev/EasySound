@@ -29,6 +29,7 @@ class PlaySoundAction(SoundActionBase):
         try:
             self.plugin_base.backend.preload_sound(value)
         except InvalidSoundFileError:
+            self._set_property(key="filepath", value="")
             return
 
         self._set_property(key="filepath", value=value)
@@ -266,10 +267,9 @@ class PlaySoundAction(SoundActionBase):
             self.plugin_base.backend.play_sound(
                 path=self.filepath, volume=self.volume)
 
-        if self.mode == Mode.HOLD and self.looping_channel is not None:
-            self.stop_looping(fadeout=self.fade_out)
 
-    def on_fade_change(self, *args):
+stop_looping
+   def on_fade_change(self, *args):
         self.fade_in = round(self.fade_in_row.get_value(), 2)
         self.fade_out = round(self.fade_out_row.get_value(), 2)
 
