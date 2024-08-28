@@ -4,7 +4,7 @@ from gi.repository import Adw, Gtk, Pango
 from GtkHelper.GtkHelper import ComboRow, ScaleRow
 
 from ..chooser import ChooseFileDialog
-from ..modes import Mode
+from ..modes import Mode, MODE_LOCALES
 from ..sound_action_base import SoundActionBase
 
 
@@ -110,8 +110,10 @@ class PlaySoundAction(SoundActionBase):
 
         self.dropdown_option.clear()
         for mode in Mode:
+            locale_key = MODE_LOCALES[mode]
+            translation = self.plugin_base.lm.get(locale_key)
             self.dropdown_option.append([mode.value])
-            self.dropdown_name.append([mode.value])
+            self.dropdown_name.append([translation])
 
         self.mode_cell_renderer = Gtk.CellRendererText(
             ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
