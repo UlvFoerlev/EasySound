@@ -4,7 +4,10 @@ import pygame as pg
 from pathlib import Path
 from streamcontroller_plugin_tools import BackendBase
 try:
+    import sys
     print("In module products __package__, __name__ ==", __package__, __name__)
+    print(
+        "In module products sys.path[0], __package__ ==", sys.path[0], __package__)
     from .exceptions import InvalidSoundFileError
 except Exception:
     raise Exception()
