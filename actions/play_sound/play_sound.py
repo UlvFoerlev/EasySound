@@ -4,7 +4,7 @@ from gi.repository import Adw, Gtk, Pango
 from GtkHelper.GtkHelper import ComboRow, ScaleRow
 
 from ..chooser import ChooseFileDialog
-from ..exceptions import InvalidSoundFileError
+from ..backend import InvalidSoundFileError
 from ..modes import Mode
 from ..sound_action_base import SoundActionBase
 

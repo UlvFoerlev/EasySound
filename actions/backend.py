@@ -5,6 +5,14 @@ from pygame.mixer import Sound, Channel
 from .exceptions import InvalidSoundFileError
 
 
+class EasySoundError(Exception):
+    pass
+
+
+class InvalidSoundFileError(EasySoundError):
+    pass
+
+
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
