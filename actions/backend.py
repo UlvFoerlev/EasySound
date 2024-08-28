@@ -1,8 +1,13 @@
-from streamcontroller_plugin_tools import BackendBase
-from pathlib import Path
-import pygame as pg
+
 from pygame.mixer import Sound, Channel
-from .exceptions import InvalidSoundFileError
+import pygame as pg
+from pathlib import Path
+from streamcontroller_plugin_tools import BackendBase
+try:
+    print("In module products __package__, __name__ ==", __package__, __name__)
+    from .exceptions import InvalidSoundFileError
+except Exception:
+    raise Exception()
 
 
 class Backend(BackendBase):
