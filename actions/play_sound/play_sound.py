@@ -25,6 +25,8 @@ class PlaySoundAction(SoundActionBase):
         if not isinstance(value, str):
             return
 
+        self.plugin_base.backend.preload_sound(value)
+
         self._set_property(key="filepath", value=value)
 
     @property
@@ -112,7 +114,8 @@ class PlaySoundAction(SoundActionBase):
             ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
         )
         self.mode_row.combo_box.pack_start(self.mode_cell_renderer, True)
-        self.mode_row.combo_box.add_attribute(self.mode_cell_renderer, "text", 0)
+        self.mode_row.combo_box.add_attribute(
+            self.mode_cell_renderer, "text", 0)
 
         self.mode_row.combo_box.set_active(self.mode_index)
 
@@ -164,15 +167,7 @@ class PlaySoundAction(SoundActionBase):
 
         # Attach Methods
         self.fade_out_row.connect("changed", self.on_fade_change)
-        self.fade_in_row.connect("changed", self.on_fade_change)
-
-        # ADD to UI
-        base.append(self.fade_in_row)
-        base.append(self.fade_out_row)
-
-    def get_config_rows(self):
-        base = super().get_config_rows()
-        self.setup_filebox(base=base)
+        self.fade_in_row.connect("changed", self.on_fade_change)self.plugin_base.backend
         self.setup_volumebox(base=base)
         self.setup_modebox(base=base)
         self.setup_fade_box(base=base)
@@ -264,7 +259,8 @@ class PlaySoundAction(SoundActionBase):
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
-            self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
+            self.plugin_base.backend.play_sound(
+                path=self.filepath, volume=self.volume)
 
         if self.mode == Mode.HOLD and self.looping_channel is not None:
             self.stop_looping(fadeout=self.fade_out)
