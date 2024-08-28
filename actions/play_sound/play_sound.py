@@ -167,7 +167,7 @@ class PlaySoundAction(SoundActionBase):
 
         # Attach Methods
         self.fade_out_row.connect("changed", self.on_fade_change)
-        self.fade_in_row.connect("changed", self.on_fade_change)self.plugin_base.backend
+        self.fade_in_row.connect("changed", self.on_fade_change)
         self.setup_volumebox(base=base)
         self.setup_modebox(base=base)
         self.setup_fade_box(base=base)
