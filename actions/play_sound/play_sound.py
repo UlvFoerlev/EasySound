@@ -267,9 +267,7 @@ class PlaySoundAction(SoundActionBase):
             self.plugin_base.backend.play_sound(
                 path=self.filepath, volume=self.volume)
 
-
-stop_looping
-   def on_fade_change(self, *args):
+    def on_fade_change(self, *args):
         self.fade_in = round(self.fade_in_row.get_value(), 2)
         self.fade_out = round(self.fade_out_row.get_value(), 2)
 
