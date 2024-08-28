@@ -4,7 +4,6 @@ from gi.repository import Adw, Gtk, Pango
 from GtkHelper.GtkHelper import ComboRow, ScaleRow
 
 from ..chooser import ChooseFileDialog
-from ..exceptions import InvalidSoundFileError
 from ..modes import Mode
 from ..sound_action_base import SoundActionBase
 
@@ -26,9 +25,8 @@ class PlaySoundAction(SoundActionBase):
         if not isinstance(value, str):
             return
 
-        try:
-            self.plugin_base.backend.preload_sound(value)
-        except InvalidSoundFileError:
+        valid = self.plugin_base.backend.preload_sound(value)
+        if not valid:
             self._set_property(key="filepath", value="")
             return
 

@@ -5,14 +5,6 @@ from pathlib import Path
 from streamcontroller_plugin_tools import BackendBase
 
 
-class EasySoundError(Exception):
-    pass
-
-
-class InvalidSoundFileError(EasySoundError):
-    pass
-
-
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -22,13 +14,15 @@ class Backend(BackendBase):
 
         self.cached_sounds: dict[str, Sound] = {}
 
-    def cache_sound(self, path: str | Path):
+    def cache_sound(self, path: str | Path) -> bool:
         key = path if isinstance(path, str) else str(path)
 
         try:
             self.cached_sounds[key] = pg.mixer.Sound(path)
         except pg.error:
-            raise InvalidSoundFileError(f"Invalid filetype {key}.")
+            return False
+
+        return True
 
     def play_sound(
         self,
@@ -41,9 +35,8 @@ class Backend(BackendBase):
         key = path if isinstance(path, str) else str(path)
 
         if key not in self.cached_sounds:
-            try:
-                self.cache_sound(path=path)
-            except InvalidSoundFileError:
+            valid = self.cache_sound(path=path)
+            if not valid:
                 return None, None
 
         sound = self.cached_sounds[key]
