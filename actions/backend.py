@@ -1,8 +1,14 @@
 
-from pygame.mixer import Sound, Channel
-import pygame as pg
-from pathlib import Path
 from streamcontroller_plugin_tools import BackendBase
+from pathlib import Path
+
+try:
+    import os
+    os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+    import pygame as pg
+    from pygame.mixer import Sound, Channel
+except ImportError as e:
+    raise e
 
 
 class Backend(BackendBase):
