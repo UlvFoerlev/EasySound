@@ -20,7 +20,7 @@ class Backend(BackendBase):
 
         self.cached_sounds: dict[str, Sound] = {}
 
-    def cache_sound(self, path: str | Path) -> bool:
+    def preload_sound(self, path: str | Path) -> bool:
         key = path if isinstance(path, str) else str(path)
 
         try:
@@ -41,7 +41,7 @@ class Backend(BackendBase):
         key = path if isinstance(path, str) else str(path)
 
         if key not in self.cached_sounds:
-            valid = self.cache_sound(path=path)
+            valid = self.preload_sound(path=path)
             if not valid:
                 return None, None
 
