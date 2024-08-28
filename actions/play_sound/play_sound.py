@@ -171,6 +171,15 @@ class PlaySoundAction(SoundActionBase):
         # Attach Methods
         self.fade_out_row.connect("changed", self.on_fade_change)
         self.fade_in_row.connect("changed", self.on_fade_change)
+        self.fade_in_row.connect("changed", self.on_fade_change)
+
+        # ADD to UI
+        base.append(self.fade_in_row)
+        base.append(self.fade_out_row)
+
+    def get_config_rows(self):
+        base = super().get_config_rows()
+        self.setup_filebox(base=base)
         self.setup_volumebox(base=base)
         self.setup_modebox(base=base)
         self.setup_fade_box(base=base)
