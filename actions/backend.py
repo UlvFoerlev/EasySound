@@ -6,7 +6,8 @@ from streamcontroller_plugin_tools import BackendBase
 try:
     from .exceptions import InvalidSoundFileError
 except ImportError:
-    __package__ = __name__
+    import sys
+    __package__ = sys.path[0]
     from .exceptions import InvalidSoundFileError
 
 
