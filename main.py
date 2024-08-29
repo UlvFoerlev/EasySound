@@ -23,7 +23,7 @@ class PluginEasySound(PluginBase):
             plugin_name="EasySound",
             github_repo="https://github.com/UlvFoerlev/EasySound",
             plugin_version="1.0.0",
-            app_version="1.1.1-alpha",
+            app_version="1.5.0-beta",
         )
 
     def setup_actions(self):
