@@ -4,10 +4,10 @@
     "id": "uf_easy_sound",
     "name": "EasySound",
     "descriptions": {
-        "en_US": "This plugin allows you to play audiofiles from your local machine."
+        "en_US": "This plugin allows you to play audio files from your local machine."
     },
     "short-descriptions": {
-        "en_US": "Play audiofiles."
+        "en_US": "Play audio files."
     },
     "tags": [
         "Audio",
