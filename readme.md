@@ -5,7 +5,7 @@ EasySound is a plugin for StreamController that lets the user play audio files t
 https://github.com/StreamController/StreamController
 
 ## Play Sound
-EasySound only have on action "Play Sound", this should cover most of the users needs. Combing multipole Play Sound actions should cover most advanced needs. 
+EasySound only have on action "Play Sound", this should cover most of the users needs. Combing multiple "Play Sound" actions should cover most advanced needs. 
 The Actions have the following settings:
 
 ### Sound File
