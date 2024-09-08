@@ -276,7 +276,7 @@ class PlaySoundAction(SoundActionBase):
         if self.filepath and Mode.RELEASE == self.mode:
             self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
 
-        elif Mode.HOLD:
+        elif self.filepath and self.mode == Mode.HOLD:
             self.stop_looping(fadeout=self.fade_out)
 
     def on_fade_change(self, *args):
