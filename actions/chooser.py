@@ -8,7 +8,7 @@ from typing import Any
 
 # Import globals
 import globals as gl
-from gi.repository import Gio, GLib, GObject, Gtk, GError
+from gi.repository import Gio, GLib, GObject, Gtk
 
 
 class ChooseFileDialog(Gtk.FileDialog):
@@ -32,7 +32,7 @@ class ChooseFileDialog(Gtk.FileDialog):
     def callback(self, dialog, result):
         try:
             selected_file = self.open_finish(result)
-        except GError:
+        except Exception:
             return
 
         self.selected_file = Path(selected_file.get_path())
