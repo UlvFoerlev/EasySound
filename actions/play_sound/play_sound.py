@@ -119,8 +119,7 @@ class PlaySoundAction(SoundActionBase):
             ellipsize=Pango.EllipsizeMode.END, max_width_chars=60
         )
         self.mode_row.combo_box.pack_start(self.mode_cell_renderer, True)
-        self.mode_row.combo_box.add_attribute(
-            self.mode_cell_renderer, "text", 0)
+        self.mode_row.combo_box.add_attribute(self.mode_cell_renderer, "text", 0)
 
         self.mode_row.combo_box.set_active(self.mode_index)
 
@@ -258,6 +257,7 @@ class PlaySoundAction(SoundActionBase):
                 )
 
                 self.looping_channel = channel
+
             case Mode.PLAY_TILL_TURNED_OFF:
                 if self.active:
                     _, channel = self.plugin_base.backend.play_sound(
@@ -268,13 +268,16 @@ class PlaySoundAction(SoundActionBase):
                     )
 
                     self.looping_channel = channel
+
                 elif not self.active:
                     self.stop_looping(fadeout=self.fade_out)
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
-            self.plugin_base.backend.play_sound(
-                path=self.filepath, volume=self.volume)
+            self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
+
+        elif Mode.HOLD:
+            self.stop_looping(fadeout=self.fade_out)
 
     def on_fade_change(self, *args):
         self.fade_in = round(self.fade_in_row.get_value(), 2)
