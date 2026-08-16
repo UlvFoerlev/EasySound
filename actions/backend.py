@@ -17,6 +17,7 @@ class Backend(BackendBase):
         super().__init__(*args, **kwargs)
         
         pg.mixer.init()
+        pg.mixer.set_num_channels(32)
 
         self.cached_sounds: dict[str, Sound] = {}
 
