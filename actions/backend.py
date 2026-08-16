@@ -1,5 +1,6 @@
 from streamcontroller_plugin_tools import BackendBase
 from pathlib import Path
+from threading import Timer
 
 try:
     import os
@@ -14,9 +15,9 @@ except ImportError as e:
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        
         pg.mixer.init()
-        pg.init()
+        pg.mixer.set_num_channels(32)
 
         self.cached_sounds: dict[str, Sound] = {}
 
@@ -24,8 +25,8 @@ class Backend(BackendBase):
         key = path if isinstance(path, str) else str(path)
 
         try:
-            self.cached_sounds[key] = pg.mixer.Sound(path)
-        except (pg.error, FileNotFoundError):
+            self.cached_sounds[key] = pg.mixer.Sound(key)
+        except (pg.error, OSError, TypeError, ValueError):
             return False
 
         return True
@@ -36,7 +37,7 @@ class Backend(BackendBase):
         volume: float = 100.0,
         loops: int = 0,
         fade_in: float = 0.0,
-        immediate_fade_out: float = 0.0,
+        fade_out: float = 0.0,
     ) -> tuple[Sound | None, Channel | None]:
         key = path if isinstance(path, str) else str(path)
 
@@ -46,13 +47,30 @@ class Backend(BackendBase):
                 return None, None
 
         sound = self.cached_sounds[key]
-        real_volume = max(min((volume / 100.0), 1.0), 0.0)
-        sound.set_volume(real_volume)
-        channel = sound.play(loops=loops, fade_ms=int(fade_in * 1000))
-        if immediate_fade_out:
-            sound.fadeout(int(immediate_fade_out * 1000))
+
+        channel = pg.mixer.find_channel()
+        if channel is None:
+            return None, None
+
+        # Volume is set per channel; Sound.set_volume would hit every action sharing the file
+        channel.set_volume(max(min((volume / 100.0), 1.0), 0.0))
+        channel.play(sound, loops=loops, fade_ms=int(fade_in * 1000))
+
+        if fade_out and loops == 0:
+            self.schedule_fade_out(channel=channel, sound=sound, fade_out=fade_out)
 
         return sound, channel
+
+    def schedule_fade_out(self, channel: Channel, sound: Sound, fade_out: float) -> None:
+        delay = max(sound.get_length() - fade_out, 0.0)
+
+        timer = Timer(delay, self.fade_out_channel, args=(channel, sound, fade_out))
+        timer.daemon = True
+        timer.start()
+
+    def fade_out_channel(self, channel: Channel, sound: Sound, fade_out: float) -> None:
+        if channel.get_sound() == sound:  # the channel may have been recycled by now
+            channel.fadeout(int(fade_out * 1000))
 
 
 backend = Backend()
