@@ -287,7 +287,7 @@ class PlaySoundAction(SoundActionBase):
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
-            self._play()
+            self._play(fade_in=self.fade_in, fade_out=self.fade_out)
 
         elif self.filepath and self.mode == Mode.HOLD:
             self.stop_looping(fadeout=self.fade_out)
