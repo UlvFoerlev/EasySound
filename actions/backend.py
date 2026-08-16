@@ -14,9 +14,8 @@ except ImportError as e:
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        
         pg.mixer.init()
-        pg.init()
 
         self.cached_sounds: dict[str, Sound] = {}
 
