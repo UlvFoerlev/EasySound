@@ -36,4 +36,4 @@ The sound will be played on "Turned On" and stop on "Turned Off", see above.
 The sound will fade in from zero volume. Set duration in seconds.
 
 ### Fade Out
-The sound will fade out to zero volume on play. Set duration in seconds. Fade Out will happen when the sound is stopped, so it causes the sound to play for longer.
+The sound will fade out to zero volume. Set duration in seconds. A one-shot sound fades out over its last 'n' seconds; a looping sound ("Hold" or "Play until Turned Off") keeps playing for 'n' seconds after it is stopped.

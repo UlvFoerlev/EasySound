@@ -13,7 +13,7 @@
     "action.play-sound.fade-in.title": "Fade In",
     "action.play-sound.fade-in.subtitle": "Fade sound in over 'n' seconds.",
     "action.play-sound.fade-out.title": "Fade Out",
-    "action.play-sound.fade-out.subtitle": "Fade sound out over 'n' seconds. Will elongate the sound.",
+    "action.play-sound.fade-out.subtitle": "Fade sound out over 'n' seconds, at the end of the sound or when a loop is stopped.",
     "action.generic.cancel": "Cancel",
     "action.generic.select": "Select",
     "action.generic.volume": "Volume"

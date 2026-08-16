@@ -213,7 +213,6 @@ class PlaySoundAction(SoundActionBase):
         # Attach Methods
         self.fade_out_row.connect("changed", self.on_fade_change)
         self.fade_in_row.connect("changed", self.on_fade_change)
-        self.fade_in_row.connect("changed", self.on_fade_change)
 
         # ADD to UI
         base.append(self.fade_in_row)
@@ -254,6 +253,7 @@ class PlaySoundAction(SoundActionBase):
         mode = list(Mode)[mode_index]
 
         self.stop_looping()
+        self.active = False
 
         self.mode = mode
 
@@ -261,27 +261,28 @@ class PlaySoundAction(SoundActionBase):
         if not self.filepath:
             return
 
-        self.active = not self.active
-
         match self.mode:
             case Mode.PRESS:
-                self._play(fade_in=self.fade_in, immediate_fade_out=self.fade_out)
+                self._play(fade_in=self.fade_in, fade_out=self.fade_out)
             case Mode.TURN_ON:
+                self.active = not self.active
                 if self.active:
-                    self._play(fade_in=self.fade_in, immediate_fade_out=self.fade_out)
+                    self._play(fade_in=self.fade_in, fade_out=self.fade_out)
             case Mode.TURN_OFF:
+                self.active = not self.active
                 if not self.active:
-                    self._play(fade_in=self.fade_in, immediate_fade_out=self.fade_out)
+                    self._play(fade_in=self.fade_in, fade_out=self.fade_out)
             case Mode.HOLD:
                 self.stop_looping()
 
                 self.looping_channel = self._play(loops=-1, fade_in=self.fade_in)
 
             case Mode.PLAY_TILL_TURNED_OFF:
+                self.active = not self.active
                 if self.active:
                     self.looping_channel = self._play(loops=-1, fade_in=self.fade_in)
 
-                elif not self.active:
+                else:
                     self.stop_looping(fadeout=self.fade_out)
 
     def on_key_up(self):
@@ -299,7 +300,7 @@ class PlaySoundAction(SoundActionBase):
         if self.looping_channel is None:
             return
 
-        if not self.fade_out:
+        if not fadeout:
             self.looping_channel.stop()
         else:
             self.looping_channel.fadeout(int(fadeout * 1000))

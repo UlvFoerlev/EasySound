@@ -8,7 +8,6 @@ from typing import Any
 
 from gi.repository import Gio, GLib, Gtk
 
-
 AUDIO_MIME_TYPES = (
     "audio/mpeg",
     "audio/x-wav",
