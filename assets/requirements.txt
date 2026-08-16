@@ -1,1 +1,4 @@
-pygame
+pygame-ce
+streamcontroller-plugin-tools>=2.0.1
+rpyc==6.0.0
+loguru==0.7.2

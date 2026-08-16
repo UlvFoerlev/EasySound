@@ -43,4 +43,4 @@ class PluginEasySound(PluginBase):
         self.launch_backend(
             backend_path=backend_path, open_in_terminal=False, venv_path=venv_path
         )
-        self.wait_for_backend(tries=5)
+        self.wait_for_backend()
