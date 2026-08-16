@@ -23,8 +23,8 @@ class Backend(BackendBase):
         key = path if isinstance(path, str) else str(path)
 
         try:
-            self.cached_sounds[key] = pg.mixer.Sound(path)
-        except (pg.error, FileNotFoundError):
+            self.cached_sounds[key] = pg.mixer.Sound(key)
+        except (pg.error, OSError, TypeError, ValueError):
             return False
 
         return True

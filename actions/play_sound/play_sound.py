@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from gi.repository import Adw, Gtk, Pango
+from gi.repository import Adw, GLib, Gtk, Pango
 from GtkHelper.GtkHelper import ComboRow, ScaleRow
 
 from ..chooser import ChooseFileDialog
@@ -14,6 +14,7 @@ class PlaySoundAction(SoundActionBase):
 
         self.looping_channel = None
         self.active = False
+        self.validate_timeout = None
 
     @property
     def filepath(self) -> str:
@@ -23,11 +24,6 @@ class PlaySoundAction(SoundActionBase):
     @filepath.setter
     def filepath(self, value: str):
         if not isinstance(value, str):
-            return
-
-        valid = self.plugin_base.backend.preload_sound(value)
-        if not valid:
-            self._set_property(key="filepath", value="")
             return
 
         self._set_property(key="filepath", value=value)
@@ -75,6 +71,49 @@ class PlaySoundAction(SoundActionBase):
     def mode_index(self) -> int:
         return [x for x in Mode].index(self.mode)
 
+    def _sound_loads(self, path: str) -> bool:
+        backend = getattr(self.plugin_base, "backend", None)
+        if not path or backend is None:
+            return False
+
+        try:
+            return bool(backend.preload_sound(path))
+        except Exception:  # rpyc reraises backend and connection faults as arbitrary types
+            return False
+
+    def _play(self, **kwargs):
+        backend = getattr(self.plugin_base, "backend", None)
+        channel = None
+
+        if backend is not None:
+            try:
+                _, channel = backend.play_sound(
+                    path=self.filepath, volume=self.volume, **kwargs
+                )
+            except Exception:
+                channel = None
+
+        if channel is None:
+            self.show_error(duration=2)
+
+        return channel
+
+    def _queue_filepath_validation(self):
+        if self.validate_timeout is not None:
+            GLib.source_remove(self.validate_timeout)
+
+        self.validate_timeout = GLib.timeout_add(500, self._validate_filepath)
+
+    def _validate_filepath(self):
+        self.validate_timeout = None
+
+        if not self.filepath or self._sound_loads(self.filepath):
+            self.filepath_input.remove_css_class("error")
+        else:
+            self.filepath_input.add_css_class("error")
+
+        return GLib.SOURCE_REMOVE
+
     def setup_filebox(self, base):
         self.filebox_name = Gtk.ListStore.new([str])
         self.filebox = ComboRow(
@@ -99,6 +138,8 @@ class PlaySoundAction(SoundActionBase):
         self.filebox.main_box.append(self.filepath_browse)
 
         base.append(self.filebox)
+
+        self._queue_filepath_validation()
 
     def setup_modebox(self, base):
         self.dropdown_option = Gtk.ListStore.new([str])
@@ -192,18 +233,18 @@ class PlaySoundAction(SoundActionBase):
         self.filepath_input.set_text(self.filepath)
 
     def on_filepath_browse_click(self, entry):
-        file_dialog = ChooseFileDialog(
+        # Held so the dialog outlives this call; open() returns before the user picks
+        self.file_dialog = ChooseFileDialog(
             plugin=self.plugin_base,
             dialog_name="Select Audio File",
             setter_func=self._set_filepath,
         )
 
-        self.filepath = file_dialog.selected_file or ""
-
     def on_filepath_change(self, entry, _):
         self.filepath = entry.get_text()
 
         self.stop_looping()
+        self._queue_filepath_validation()
 
     def on_volume_scale_change(self, entry):
         self.volume = entry.get_value()
@@ -224,57 +265,28 @@ class PlaySoundAction(SoundActionBase):
 
         match self.mode:
             case Mode.PRESS:
-                self.plugin_base.backend.play_sound(
-                    path=self.filepath,
-                    volume=self.volume,
-                    fade_in=self.fade_in,
-                    immediate_fade_out=self.fade_out,
-                )
+                self._play(fade_in=self.fade_in, immediate_fade_out=self.fade_out)
             case Mode.TURN_ON:
                 if self.active:
-                    self.plugin_base.backend.play_sound(
-                        path=self.filepath,
-                        volume=self.volume,
-                        fade_in=self.fade_in,
-                        immediate_fade_out=self.fade_out,
-                    )
+                    self._play(fade_in=self.fade_in, immediate_fade_out=self.fade_out)
             case Mode.TURN_OFF:
                 if not self.active:
-                    self.plugin_base.backend.play_sound(
-                        path=self.filepath,
-                        volume=self.volume,
-                        fade_in=self.fade_in,
-                        immediate_fade_out=self.fade_out,
-                    )
+                    self._play(fade_in=self.fade_in, immediate_fade_out=self.fade_out)
             case Mode.HOLD:
                 self.stop_looping()
 
-                _, channel = self.plugin_base.backend.play_sound(
-                    path=self.filepath,
-                    volume=self.volume,
-                    loops=-1,
-                    fade_in=self.fade_in,
-                )
-
-                self.looping_channel = channel
+                self.looping_channel = self._play(loops=-1, fade_in=self.fade_in)
 
             case Mode.PLAY_TILL_TURNED_OFF:
                 if self.active:
-                    _, channel = self.plugin_base.backend.play_sound(
-                        path=self.filepath,
-                        volume=self.volume,
-                        loops=-1,
-                        fade_in=self.fade_in,
-                    )
-
-                    self.looping_channel = channel
+                    self.looping_channel = self._play(loops=-1, fade_in=self.fade_in)
 
                 elif not self.active:
                     self.stop_looping(fadeout=self.fade_out)
 
     def on_key_up(self):
         if self.filepath and Mode.RELEASE == self.mode:
-            self.plugin_base.backend.play_sound(path=self.filepath, volume=self.volume)
+            self._play()
 
         elif self.filepath and self.mode == Mode.HOLD:
             self.stop_looping(fadeout=self.fade_out)
