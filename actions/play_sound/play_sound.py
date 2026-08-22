@@ -258,6 +258,7 @@ class PlaySoundAction(SoundActionBase):
             default_value=False,
             title="action.play-sound.spatial",
             subtitle="action.play-sound.spatial.subtitle",
+            on_change=self.on_spatial_toggled,
             auto_add=False,
         )
         self.advanced_section.add_row(self.spatial_row.widget)
@@ -272,6 +273,8 @@ class PlaySoundAction(SoundActionBase):
         )
         spatial_button.connect("clicked", self.on_spatial_clicked)
         self.spatial_button_row.add_suffix(spatial_button)
+        # Nothing reads the map while spatial is off, so the row is not clickable until it is on
+        self.spatial_button_row.set_sensitive(self.spatial_enabled)
         self.advanced_section.add_row(self.spatial_button_row)
 
         # The framework adds every auto_add row itself, so returning them here would double-parent them
@@ -401,6 +404,12 @@ class PlaySoundAction(SoundActionBase):
             source, sinks, self.speaker_positions(), self.headset_sinks()
         )
         return [list(per_sink.get(sink, (1.0, 1.0))) for sink in sinks]
+
+    def on_spatial_toggled(self, widget, new_value, old_value):
+        # Guarded: the switch's value is loaded before the button row exists on the first build
+        row = getattr(self, "spatial_button_row", None)
+        if row is not None:
+            row.set_sensitive(bool(new_value))
 
     def on_spatial_clicked(self, _button):
         available = self.list_sinks()
