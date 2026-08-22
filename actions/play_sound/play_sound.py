@@ -3,12 +3,12 @@ from GtkHelper.ComboRow import SimpleComboRowItem
 from GtkHelper.FileDialogRow import FileDialogFilter
 from GtkHelper.GenerativeUI.ComboRow import ComboRow
 from GtkHelper.GenerativeUI.EntryRow import EntryRow
-from GtkHelper.GenerativeUI.FileDialogRow import FileDialogRow
 from GtkHelper.GenerativeUI.ScaleRow import ScaleRow
 from GtkHelper.GenerativeUI.SpinRow import SpinRow
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.EventAssigner import EventAssigner
 
+from ..compat import FileDialogRow
 from ..modes import MODE_LOCALES, Mode
 from ..sound_action_base import SoundActionBase
 
