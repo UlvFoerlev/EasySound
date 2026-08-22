@@ -1,6 +1,6 @@
 from streamcontroller_plugin_tools import BackendBase
 from pathlib import Path
-from threading import Timer
+from threading import Thread, Timer
 
 try:
     import os
@@ -12,24 +12,46 @@ except ImportError as e:
     raise e
 
 
+def file_stamp(path: str) -> tuple[float, int] | None:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+
+    return stat.st_mtime, stat.st_size
+
+
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         pg.mixer.init()
         pg.mixer.set_num_channels(32)
 
         self.cached_sounds: dict[str, Sound] = {}
+        self.cache_stamps: dict[str, tuple[float, int] | None] = {}
 
-    def preload_sound(self, path: str | Path) -> bool:
+    def preload_sound(self, path: str | Path, force: bool = False) -> bool:
         key = path if isinstance(path, str) else str(path)
+        stamp = file_stamp(key)
+
+        # A cached sound is reused unless the file changed on disk, so a press never waits on decoding
+        if not force and key in self.cached_sounds and self.cache_stamps.get(key) == stamp:
+            return True
 
         try:
             self.cached_sounds[key] = pg.mixer.Sound(key)
         except (pg.error, OSError, TypeError, ValueError):
+            self.cached_sounds.pop(key, None)
+            self.cache_stamps.pop(key, None)
             return False
 
+        self.cache_stamps[key] = stamp
         return True
+
+    def warm_sound(self, path: str | Path) -> None:
+        # Fire-and-forget so page loads and key presses never block on the first decode
+        Thread(target=self.preload_sound, args=(path,), daemon=True).start()
 
     def play_sound(
         self,
@@ -41,10 +63,8 @@ class Backend(BackendBase):
     ) -> tuple[Sound | None, Channel | None]:
         key = path if isinstance(path, str) else str(path)
 
-        if key not in self.cached_sounds:
-            valid = self.preload_sound(path=path)
-            if not valid:
-                return None, None
+        if not self.preload_sound(path=path):
+            return None, None
 
         sound = self.cached_sounds[key]
 

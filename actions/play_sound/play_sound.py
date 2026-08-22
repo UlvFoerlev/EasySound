@@ -23,6 +23,7 @@ class PlaySoundAction(SoundActionBase):
         self.looping_channel = None
         self.active = False
         self.validate_timeout = None
+        self.warmed_path = None
 
         # Dial DOWN/UP are kept so dial presses behave as they did under ActionBase's legacy dispatch
         self.add_event_assigner(
@@ -41,6 +42,26 @@ class PlaySoundAction(SoundActionBase):
                 callback=self.on_released,
             )
         )
+
+    def on_ready(self) -> None:
+        self.warm_sound_cache()
+
+    def warm_sound_cache(self) -> None:
+        # on_update calls on_ready by default, so the guard keeps this to one warm-up per path
+        path = self.filepath
+        if not path or path == self.warmed_path:
+            return
+
+        backend = getattr(self.plugin_base, "backend", None)
+        if backend is None:
+            return
+
+        try:
+            backend.warm_sound(path)
+        except Exception:  # rpyc reraises backend and connection faults as arbitrary types
+            return
+
+        self.warmed_path = path
 
     @property
     def filepath(self) -> str:
@@ -189,6 +210,7 @@ class PlaySoundAction(SoundActionBase):
 
         if not path or self._sound_loads(path):
             self.filepath_entry.widget.remove_css_class("error")
+            self.warmed_path = path or None  # _sound_loads already decoded it into the backend cache
             if path:
                 # set_ui_value manages the widget's own signals, so syncing the sibling cannot loop
                 self.filepath_row.set_ui_value(path)
