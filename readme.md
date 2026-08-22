@@ -4,6 +4,17 @@
 EasySound is a plugin for StreamController that lets the user play audio files through their Stream Deck.
 https://github.com/StreamController/StreamController
 
+## Requirements
+
+Linux with a PulseAudio-compatible sound server, which means **PulseAudio or PipeWire**. PipeWire works
+through its `pipewire-pulse` layer and is the default on current Fedora, Ubuntu and Arch, so on a normal
+desktop there is nothing to install. StreamController itself is Linux-only, so this matches the platforms
+it supports.
+
+Audio output, device selection, speaker groups and spatial sound are all built on PulseAudio's sink
+model. On a system running bare ALSA with no sound server, sounds will not play: the speaker dropdown
+says so, and StreamController's log records a warning at startup.
+
 ## Play Sound
 EasySound only have on action "Play Sound", this should cover most of the users needs. Combining multiple "Play Sound" actions should cover most advanced needs. 
 The Actions have the following settings:

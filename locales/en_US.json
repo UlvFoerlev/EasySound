@@ -39,6 +39,7 @@
     "action.play-sound.speakers.custom": "Custom…",
     "action.play-sound.speakers.unavailable": "(unavailable)",
     "action.play-sound.speakers.missing": "Not connected:",
+    "action.play-sound.speakers.no-server": "No sound server found. EasySound needs PulseAudio or PipeWire.",
     "action.play-sound.groups.title": "Speaker Groups",
     "action.play-sound.groups.existing": "Groups",
     "action.play-sound.groups.name": "Group name",

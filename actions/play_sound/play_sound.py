@@ -500,6 +500,10 @@ class PlaySoundAction(SoundActionBase):
         return f"{target.split(':', 1)[-1]} {suffix}"
 
     def speakers_subtitle(self) -> str | None:
+        # Checked first: with no sound server there are no sinks to be missing in the first place
+        if not self.plugin_base.audio_server()["available"]:
+            return self.plugin_base.lm.get("action.play-sound.speakers.no-server")
+
         available = [sink["name"] for sink in self.list_sinks()]
         absent = missing_sinks(self.speakers, available, self.speaker_groups())
         if not absent:

@@ -12,6 +12,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GdkPixbuf, Gtk
+from loguru import logger
 
 import globals as gl
 
@@ -144,6 +145,35 @@ class PluginEasySound(PluginBase):
 
         return action_id_in_pages(LEGACY_PLAY_SOUND_ACTION_ID, page_paths)
 
+    def audio_server(self) -> dict:
+        """Read fresh rather than cached, so a server started after StreamController is still found."""
+        backend = getattr(self, "backend", None)
+        if backend is None:
+            return {"available": False, "name": "", "error": "backend unavailable"}
+
+        try:
+            info = backend.audio_server()
+
+            return {
+                "available": bool(info["available"]),
+                "name": str(info["name"]),
+                "error": str(info["error"]),
+            }
+        except Exception as error:  # rpyc reraises backend faults as arbitrary types
+            return {"available": False, "name": "", "error": str(error)}
+
+    def log_audio_server(self) -> None:
+        info = self.audio_server()
+
+        if info["available"]:
+            logger.info(f"EasySound: audio server ready ({info['name'] or 'unknown'})")
+        else:
+            # The only hard requirement: every output feature is built on PulseAudio's sink model
+            logger.warning(
+                "EasySound needs PulseAudio or PipeWire, and no sound server answered "
+                f"({info['error']}). Sounds will not play until one is running."
+            )
+
     def setup_backend(self):
         # Launch backend
         backend_path = Path(__file__).parent / "actions" / "backend.py"
@@ -153,3 +183,4 @@ class PluginEasySound(PluginBase):
             backend_path=backend_path, open_in_terminal=False, venv_path=venv_path
         )
         self.wait_for_backend()
+        self.log_audio_server()

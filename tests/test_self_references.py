@@ -24,6 +24,7 @@ INHERITED = {
     "get_plugin_id",
     "get_settings",
     "launch_backend",
+    "backend",
     "locale_manager",
     "plugin_base",
     "register",

@@ -4,10 +4,10 @@
     "id": "uf_easy_sound",
     "name": "EasySound",
     "descriptions": {
-        "en_US": "This plugin allows you to play audio files from your local machine."
+        "en_US": "Play audio files from your local machine, on any speaker or group of speakers, with optional spatial positioning. Requires PulseAudio or PipeWire."
     },
     "short-descriptions": {
-        "en_US": "Play audio files."
+        "en_US": "Play audio files on any speaker."
     },
     "tags": [
         "Audio",

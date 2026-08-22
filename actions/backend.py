@@ -93,6 +93,17 @@ class Backend(BackendBase):
         self.sink_cache: list[dict] = []
         self.sink_cache_time = 0.0
 
+    def audio_server(self) -> dict:
+        """Whether a PulseAudio-compatible server is reachable; PipeWire answers through its pulse layer."""
+        try:
+            with pulsectl.Pulse("easysound-server-probe") as pulse:
+                info = pulse.server_info()
+                name = getattr(info, "server_name", "") or ""
+
+                return {"available": True, "name": str(name), "error": ""}
+        except Exception as error:
+            return {"available": False, "name": "", "error": str(error)}
+
     def list_sinks(self) -> list[dict]:
         # Briefly cached so a group or single-sink press does not pay a pulse round trip every time
         now = time.monotonic()
