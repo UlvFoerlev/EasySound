@@ -15,8 +15,9 @@ def test_mode_values_are_unique():
     assert len(values) == len(set(values))
 
 
-def test_declaration_order_is_the_dropdown_order():
-    # The mode dropdown maps selection to mode by list index, so reordering silently remaps saved settings
+def test_stored_mode_values_are_stable():
+    # These strings are persisted in action settings, so editing one silently breaks saved configurations
+    # "Turn OFF" is inconsistent with "Turn On" but cannot be fixed without migrating stored settings
     assert [mode.value for mode in Mode] == [
         "Press",
         "Release",

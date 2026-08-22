@@ -16,8 +16,3 @@ class SoundActionBase(ActionCore):
             value = default
 
         return value
-
-    def _set_property(self, key: str, value: Any) -> None:
-        settings = self.get_settings()
-        settings[key] = value
-        self.set_settings(settings)
