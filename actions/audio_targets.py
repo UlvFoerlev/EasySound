@@ -8,6 +8,15 @@ SINK_PREFIX = "sink:"
 GROUP_PREFIX = "group:"
 
 
+def target_value(value: Any) -> str:
+    """ComboRow hands its callbacks item objects, while everything else here works on the stored string."""
+    getter = getattr(value, "get_value", None)
+    if callable(getter):
+        value = getter()
+
+    return value if isinstance(value, str) else ""
+
+
 def format_sink_target(sink_name: str) -> str:
     return f"{SINK_PREFIX}{sink_name}"
 

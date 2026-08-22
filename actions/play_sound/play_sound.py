@@ -3,6 +3,7 @@ from GtkHelper.ComboRow import SimpleComboRowItem
 from GtkHelper.FileDialogRow import FileDialogFilter
 from GtkHelper.GenerativeUI.ComboRow import ComboRow
 from GtkHelper.GenerativeUI.EntryRow import EntryRow
+from GtkHelper.GenerativeUI.ExpanderRow import ExpanderRow
 from GtkHelper.GenerativeUI.ScaleRow import ScaleRow
 from GtkHelper.GenerativeUI.SpinRow import SpinRow
 from src.backend.DeckManagement.InputIdentifier import Input
@@ -18,6 +19,7 @@ from ..audio_targets import (
     missing_sinks,
     normalize_groups,
     resolve_target,
+    target_value,
 )
 from ..compat import FileDialogRow
 from ..group_dialog import SpeakerGroupDialog
@@ -134,27 +136,6 @@ class PlaySoundAction(SoundActionBase):
             on_change=self.on_filepath_typed,
         )
 
-        self.speakers_row = ComboRow(
-            action_core=self,
-            var_name="speakers",
-            default_value=DEFAULT,
-            items=self.speaker_items(),
-            title="action.play-sound.speakers",
-            subtitle=self.speakers_subtitle(),
-            on_change=self.on_speakers_change,
-        )
-
-        self.volume_row = ScaleRow(
-            action_core=self,
-            var_name="volume",
-            default_value=100.0,
-            min=0,
-            max=100,
-            step=1,
-            digits=0,
-            title="action.generic.volume",
-        )
-
         self.mode_row = ComboRow(
             action_core=self,
             var_name="mode",
@@ -170,6 +151,26 @@ class PlaySoundAction(SoundActionBase):
             on_change=self.on_mode_change,
         )
 
+        self.volume_row = ScaleRow(
+            action_core=self,
+            var_name="volume",
+            default_value=100.0,
+            min=0,
+            max=100,
+            step=1,
+            digits=0,
+            title="action.generic.volume",
+        )
+
+        # Sections are expanders; children use auto_add=False so the framework leaves them nested
+        self.fades_section = ExpanderRow(
+            action_core=self,
+            var_name="section_fades",
+            default_value=True,
+            title="action.play-sound.section.fades",
+            start_expanded=True,
+        )
+
         self.fade_in_row = SpinRow(
             action_core=self,
             var_name="fade_in",
@@ -180,7 +181,9 @@ class PlaySoundAction(SoundActionBase):
             digits=2,
             title="action.play-sound.fade-in.title",
             subtitle="action.play-sound.fade-in.subtitle",
+            auto_add=False,
         )
+        self.fades_section.add_row(self.fade_in_row.widget)
 
         self.fade_out_row = SpinRow(
             action_core=self,
@@ -192,9 +195,33 @@ class PlaySoundAction(SoundActionBase):
             digits=2,
             title="action.play-sound.fade-out.title",
             subtitle="action.play-sound.fade-out.subtitle",
+            auto_add=False,
+        )
+        self.fades_section.add_row(self.fade_out_row.widget)
+
+        # Created last so it lands at the bottom: top-level order is creation order
+        self.advanced_section = ExpanderRow(
+            action_core=self,
+            var_name="section_advanced",
+            default_value=True,
+            title="action.play-sound.section.advanced",
+            start_expanded=True,
         )
 
-        return self.get_generative_ui_widgets()
+        self.speakers_row = ComboRow(
+            action_core=self,
+            var_name="speakers",
+            default_value=DEFAULT,
+            items=self.speaker_items(),
+            title="action.play-sound.speakers",
+            subtitle=self.speakers_subtitle(),
+            on_change=self.on_speakers_change,
+            auto_add=False,
+        )
+        self.advanced_section.add_row(self.speakers_row.widget)
+
+        # The framework adds every auto_add row itself, so returning them here would double-parent them
+        return []
 
     def _sound_loads(self, path: str) -> bool:
         backend = getattr(self.plugin_base, "backend", None)
@@ -232,6 +259,21 @@ class PlaySoundAction(SoundActionBase):
         settings = self.plugin_base.get_settings()
         settings["speaker_groups"] = groups
         self.plugin_base.set_settings(settings)
+
+        self.refresh_speaker_items()
+
+    def refresh_speaker_items(self) -> None:
+        row = getattr(self, "speakers_row", None)
+        if row is None:
+            return
+
+        # trigger_callback=False: repopulating is not a user selection and must not reopen the editor
+        row.populate(
+            self.speaker_items(),
+            selected_item=self.speakers,
+            update_settings=False,
+            trigger_callback=False,
+        )
 
     def resolve_sinks(self) -> list[str] | None:
         target = self.speakers
@@ -290,11 +332,13 @@ class PlaySoundAction(SoundActionBase):
         return f"{self.plugin_base.lm.get('action.play-sound.speakers.missing')} {', '.join(absent)}"
 
     def on_speakers_change(self, widget, new_value, old_value):
-        if new_value != CUSTOM:
+        # ComboRow passes item objects here, not the stored strings
+        if target_value(new_value) != CUSTOM:
             return
 
         # "Custom..." acts as a button, so the previous selection is restored before opening the editor
-        previous = old_value if old_value and old_value != CUSTOM else DEFAULT
+        previous = target_value(old_value)
+        previous = previous if previous and previous != CUSTOM else DEFAULT
         self.speakers_row.set_value(previous)
         self.speakers_row.set_ui_value(previous)
         self.open_group_dialog()

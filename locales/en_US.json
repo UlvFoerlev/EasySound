@@ -5,6 +5,8 @@
     "action.play-sound.sound_file": "Sound File",
     "action.play-sound.filepath": "Filepath",
     "action.play-sound.select_file": "Select Audio File",
+    "action.play-sound.section.advanced": "Advanced",
+    "action.play-sound.section.fades": "Fades",
     "action.play-sound.audio_files": "Audio Files",
     "action.play-sound.select_mode": "Button Mode",
     "action.play-sound.select_mode.press": "Press",

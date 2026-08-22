@@ -128,3 +128,35 @@ def test_delete_group_removes_only_that_group():
     groups = [{"id": "a", "name": "A", "sinks": []}, {"id": "b", "name": "B", "sinks": []}]
     assert [g["id"] for g in delete_group(groups, "a")] == ["b"]
     assert [g["id"] for g in delete_group(groups, "missing")] == ["a", "b"]
+
+
+class FakeComboItem:
+    """Stands in for SimpleComboRowItem, which ComboRow passes to on_change instead of the value."""
+
+    def __init__(self, value):
+        self._value = value
+
+    def get_value(self):
+        return self._value
+
+
+def test_target_value_unwraps_combo_items():
+    from actions.audio_targets import target_value
+
+    assert target_value(FakeComboItem(CUSTOM)) == CUSTOM
+    assert target_value(FakeComboItem(format_sink_target(SINK_A))) == format_sink_target(SINK_A)
+
+
+def test_target_value_passes_plain_strings_through():
+    from actions.audio_targets import target_value
+
+    assert target_value(DEFAULT) == DEFAULT
+
+
+def test_target_value_handles_missing_and_odd_values():
+    from actions.audio_targets import target_value
+
+    # get_item returns None when the old selection is no longer in the list
+    assert target_value(None) == ""
+    assert target_value(FakeComboItem(None)) == ""
+    assert target_value(7) == ""
