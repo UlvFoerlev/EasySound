@@ -59,12 +59,17 @@ class FakeStream:
     def __init__(self):
         self.payload = bytearray()
         self.closed = False
+        self.drained = False
+        self.flushed = False
 
     def write(self, data):
         self.payload += data
 
     def drain(self):
-        pass
+        self.drained = True
+
+    def flush(self):
+        self.flushed = True
 
     def close(self):
         self.closed = True
@@ -470,3 +475,27 @@ def test_bluetooth_detection(backend_module):
     # bluez names the sink after the adapter, which covers a missing bus property
     assert backend_module.is_bluetooth({}, "bluez_output.AC_12_2F.1") is True
     assert backend_module.is_bluetooth({}, "alsa_output.pci-0000") is False
+
+
+def test_a_sound_that_ends_naturally_plays_its_tail_out(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"])
+    assert wait_for_idle(backend)
+
+    assert fake_streams[0].drained is True
+    assert fake_streams[0].flushed is False
+
+
+def test_stopping_discards_whatever_is_still_queued(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    handle = backend.play(str(path), sinks=["a"], loops=-1)
+    backend.stop(handle)
+    assert wait_for_idle(backend)
+
+    # Draining here would keep playing the server's buffer, making a stop audibly late
+    assert fake_streams[0].flushed is True
+    assert fake_streams[0].drained is False

@@ -282,3 +282,21 @@ def test_a_headset_and_speakers_share_one_pool():
 def test_a_lone_speaker_still_gets_a_balance_cue():
     left, right = channel_gains((-1.0, 0.0), ["spk"], {"spk": FRONT})["spk"]
     assert left > right
+
+
+def test_merging_positions_keeps_speakers_the_dialog_never_saw():
+    from actions.spatial import merge_positions
+
+    stored = {"a": [0.5, 0.5], "b": [-0.5, -0.5], "hs#left": [-0.3, 0.0]}
+    # A dialog opened on one speaker must not wipe the rest of the room
+    merged = merge_positions(stored, {"a": (0.1, 0.2)})
+
+    assert merged == {"a": (0.1, 0.2), "b": (-0.5, -0.5), "hs#left": (-0.3, 0.0)}
+
+
+def test_merging_clamps_and_survives_junk():
+    from actions.spatial import merge_positions
+
+    assert merge_positions(None, {"a": (9, -9)}) == {"a": (1.0, -1.0)}
+    assert merge_positions({"a": "junk"}, {}) == {"a": (0.0, 0.0)}
+    assert merge_positions({"a": [0.2, 0.2]}, None) == {"a": (0.2, 0.2)}

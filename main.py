@@ -45,7 +45,8 @@ class PluginEasySound(PluginBase):
         self.lm = self.locale_manager
 
         self.setup_backend()
-        self.migrate_legacy_pages()
+        # Kept: setup_actions needs to know a migration happened, since it erases its own evidence
+        self.migrated_pages = self.migrate_legacy_pages()
         self.setup_actions()
 
         # Register plugin
@@ -74,7 +75,7 @@ class PluginEasySound(PluginBase):
         self.add_action_holder(self.action_play_sound)
 
         # Registered only when in use: every registered holder gets a row in the action chooser, unconditionally
-        if not self.legacy_action_in_use():
+        if not self.migrated_pages and not self.legacy_action_in_use():
             return
 
         # Only a safety net for pages already read into memory this session; it retires itself once

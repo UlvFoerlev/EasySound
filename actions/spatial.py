@@ -234,3 +234,11 @@ def channel_gains(
             channels[sink] = (round(gain * left, 6), round(gain * right, 6))
 
     return channels
+
+
+def merge_positions(stored: Any, updates: dict[str, tuple[float, float]]) -> dict:
+    """Positions are plugin-wide but a dialog only knows its own targets, so updates are merged."""
+    merged = normalize_positions(stored)
+    merged.update({k: clamp_position(v) for k, v in (updates or {}).items()})
+
+    return merged

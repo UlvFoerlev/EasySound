@@ -35,14 +35,18 @@ from ..spatial import (
     channel_gains,
     clamp_position,
     clamp_room_size,
+    merge_positions,
     normalize_positions,
     source_delays,
     stereo_balance,
 )
 from ..spatial_dialog import SpatialDialog
 
-# Glob patterns, not MIME types: FileDialogFilter takes patterns
-AUDIO_FILE_PATTERNS = ["*.mp3", "*.wav", "*.ogg", "*.oga", "*.opus", "*.flac"]
+# Glob patterns, not MIME types: FileDialogFilter takes patterns, and they are case sensitive
+AUDIO_SUFFIXES = ["mp3", "wav", "ogg", "oga", "opus", "flac", "m4a", "aiff", "aif", "au", "wma"]
+AUDIO_FILE_PATTERNS = [f"*.{suffix}" for suffix in AUDIO_SUFFIXES] + [
+    f"*.{suffix.upper()}" for suffix in AUDIO_SUFFIXES
+]
 
 
 class PlaySoundAction(SoundActionBase):
@@ -145,7 +149,11 @@ class PlaySoundAction(SoundActionBase):
                 FileDialogFilter(
                     name=self.plugin_base.lm.get("action.play-sound.audio_files"),
                     filters=AUDIO_FILE_PATTERNS,
-                )
+                ),
+                FileDialogFilter(
+                    name=self.plugin_base.lm.get("action.play-sound.all_files"),
+                    filters=["*"],
+                ),
             ],
             on_change=self.on_filepath_picked,
         )
@@ -291,6 +299,8 @@ class PlaySoundAction(SoundActionBase):
                     "name": str(sink["name"]),
                     "label": str(sink["label"]),
                     "is_default": bool(sink["is_default"]),
+                    "kind": str(sink["kind"]),
+                    "bluetooth": bool(sink["bluetooth"]),
                 }
                 for sink in backend.list_sinks()
             ]
@@ -320,6 +330,7 @@ class PlaySoundAction(SoundActionBase):
             update_settings=False,
             trigger_callback=False,
         )
+        row.widget.set_subtitle(self.speakers_subtitle() or "")
 
     def speaker_positions(self) -> dict:
         return normalize_positions(self.plugin_base.get_settings().get("speaker_positions"))
@@ -327,7 +338,12 @@ class PlaySoundAction(SoundActionBase):
     def save_speaker_positions(self, positions: dict) -> None:
         # Where a speaker physically stands belongs to the plugin, not to one action
         settings = self.plugin_base.get_settings()
-        settings["speaker_positions"] = {sink: list(point) for sink, point in positions.items()}
+
+        # Merged, never replaced: the dialog only ever knows this action's targets, not every speaker
+        merged = merge_positions(settings.get("speaker_positions"), positions)
+        settings["speaker_positions"] = {
+            emitter: list(point) for emitter, point in merged.items()
+        }
         self.plugin_base.set_settings(settings)
 
     def save_spatial_source(self, source) -> None:

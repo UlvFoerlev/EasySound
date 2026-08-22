@@ -25,6 +25,7 @@
     "action.play-sound.spatial.room-subtitle": "Metres across the whole map, used to turn positions into distances",
     "action.play-sound.section.fades": "Fades",
     "action.play-sound.audio_files": "Audio Files",
+    "action.play-sound.all_files": "All Files",
     "action.play-sound.select_mode": "Button Mode",
     "action.play-sound.select_mode.press": "Press",
     "action.play-sound.select_mode.release": "Release",

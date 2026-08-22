@@ -11,6 +11,9 @@ import soundfile as sf
 
 CHUNK_FRAMES = 1024
 SINK_CACHE_SECONDS = 2.0
+SAMPLE_WIDTH = 2
+# How much audio may sit queued in the server; a stop cannot be quicker than this
+BUFFER_SECONDS = 0.25
 MAX_CONCURRENT_STREAMS = 32
 SAMPLE_FORMAT = pasimple.PA_SAMPLE_S16LE
 
@@ -173,7 +176,8 @@ class Backend(BackendBase):
         if not self.preload_sound(path=key):
             return None
 
-        _, rate, channels = self.cache[key]
+        sound = self.cache[key]
+        _, rate, channels = sound
         # A mono sound has no sides to pan, so spatial playback upmixes it to stereo first
         play_channels = 2 if gains and channels == 1 else channels
 
@@ -214,7 +218,7 @@ class Backend(BackendBase):
                     weights,
                     delay,
                     play_channels,
-                    key,
+                    sound,
                     gain,
                     loops,
                     fade_in,
@@ -248,6 +252,8 @@ class Backend(BackendBase):
                 app_name="EasySound",
                 stream_name="EasySound",
                 device_name=sink,
+                # Default buffering is about 2 s, which would make a stop that late and delay fades
+                tlength=int(rate * channels * SAMPLE_WIDTH * BUFFER_SECONDS),
             )
         except Exception:
             self.stream_slots.release()
@@ -261,14 +267,15 @@ class Backend(BackendBase):
         weights,
         delay: float,
         play_channels: int,
-        key: str,
+        sound: tuple,
         gain: float,
         loops: int,
         fade_in: float,
         fade_out: float,
     ) -> None:
         try:
-            samples, rate, channels = self.cache[key]
+            # Passed in rather than re-read: the cache entry can be replaced while this thread runs
+            samples, rate, channels = sound
             total = len(samples)
 
             # Wavefront delay: silence written up front, so this speaker starts late by that much
@@ -326,7 +333,11 @@ class Backend(BackendBase):
                     break
 
             try:
-                stream.drain()
+                # A stop discards what is still queued; a sound that ended naturally plays its tail out
+                if stop_at is not None:
+                    stream.flush()
+                else:
+                    stream.drain()
             except Exception:
                 pass
         except Exception:

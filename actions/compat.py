@@ -15,6 +15,13 @@ class FileDialogRow(_UpstreamFileDialogRow):
         self.widget.file_label.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
         self.widget.file_label.set_max_width_chars(FILE_LABEL_MAX_CHARS)
 
+    def _file_changed(self, file):
+        # A non-local location has no path; storing None makes load_from_path raise on the next open
+        if file is None or file.get_path() is None:
+            return
+
+        super()._file_changed(file)
+
     # Upstream 1.5.0-beta.16 leaves both hooks abstract, which makes its own class impossible to instantiate
     def connect_signals(self):
         # The inner widget takes a plain python callback rather than a GObject signal

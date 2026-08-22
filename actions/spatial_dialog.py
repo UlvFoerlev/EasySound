@@ -61,6 +61,7 @@ class SpatialDialog(Adw.Dialog):
         # A headset is two emitters, one per ear, so its channels can be panned by geometry
         self.headsets = {sink for sink in (headsets or set()) if sink in self.sinks}
         self.dragging: str | None = None
+        self.fg = (1.0, 1.0, 1.0)
 
         self.positions = emitter_layout(self.sinks, self.headsets, positions)
         self.ring_unplaced(positions)
@@ -185,13 +186,16 @@ class SpatialDialog(Adw.Dialog):
 
     def on_draw(self, area, cr, width, height, *_):
         cx, cy, scale = width / 2, height / 2, min(width, height) / 2 * 0.86
+        # Taken from the widget so the map is legible in a light theme as well as a dark one
+        fg = area.get_color()
+        self.fg = (fg.red, fg.green, fg.blue)
 
-        cr.set_source_rgba(1, 1, 1, 0.04)
+        cr.set_source_rgba(*self.fg, 0.05)
         cr.arc(cx, cy, scale, 0, math.tau)
         cr.fill()
 
         cr.set_line_width(1.0)
-        cr.set_source_rgba(1, 1, 1, 0.12)
+        cr.set_source_rgba(*self.fg, 0.16)
         for fraction in (0.33, 0.66, 1.0):
             cr.arc(cx, cy, scale * fraction, 0, math.tau)
             cr.stroke()
@@ -232,17 +236,17 @@ class SpatialDialog(Adw.Dialog):
             if self.delay_enabled and delays.get(emitter):
                 label = f"{label}  +{delays[emitter] * 1000:.0f} ms"
 
-            cr.set_source_rgba(1, 1, 1, 0.85)
+            cr.set_source_rgba(*self.fg, 0.9)
             extents = cr.text_extents(label)
             cr.move_to(sx - extents.width / 2, sy + radius + 13)
             cr.show_text(label)
 
-        cr.set_source_rgba(1, 1, 1, 0.55)
+        cr.set_source_rgba(*self.fg, 0.6)
         cr.arc(cx, cy, 6, 0, math.tau)
         cr.fill()
         listener = self.lm.get("action.play-sound.spatial.listener")
         extents = cr.text_extents(listener)
-        cr.set_source_rgba(1, 1, 1, 0.85)
+        cr.set_source_rgba(*self.fg, 0.9)
         cr.move_to(cx - extents.width / 2, cy + 22)
         cr.show_text(listener)
 
@@ -257,20 +261,21 @@ class SpatialDialog(Adw.Dialog):
 
         source_label = self.lm.get("action.play-sound.spatial.source")
         extents = cr.text_extents(source_label)
-        cr.set_source_rgba(1, 1, 1, 0.85)
+        cr.set_source_rgba(*self.fg, 0.9)
         cr.move_to(srx - extents.width / 2, sry + HANDLE_RADIUS + 12)
         cr.show_text(source_label)
 
     def draw_badge(self, cr, x, y, text):
         extents = cr.text_extents(text)
 
-        cr.set_source_rgba(0.10, 0.11, 0.13, 0.85)
+        inverse = tuple(1.0 - channel for channel in self.fg)
+        cr.set_source_rgba(*inverse, 0.85)
         cr.rectangle(
             x - extents.width / 2 - 4, y - extents.height - 4, extents.width + 8, extents.height + 8
         )
         cr.fill()
 
-        cr.set_source_rgba(1, 1, 1, 0.9)
+        cr.set_source_rgba(*self.fg, 0.95)
         cr.move_to(x - extents.width / 2, y)
         cr.show_text(text)
 
@@ -282,7 +287,7 @@ class SpatialDialog(Adw.Dialog):
         head = 8.0
         spread = 0.4
 
-        cr.set_source_rgba(1, 1, 1, 0.35)
+        cr.set_source_rgba(*self.fg, 0.4)
         cr.set_line_width(1.5)
         cr.move_to(from_x, from_y)
         cr.line_to(tip_x, tip_y)
