@@ -2,6 +2,8 @@ from pathlib import Path
 
 from gi.repository import Adw, GLib, Gtk, Pango
 from GtkHelper.GtkHelper import ComboRow, ScaleRow
+from src.backend.DeckManagement.InputIdentifier import Input
+from src.backend.PluginManager.EventAssigner import EventAssigner
 
 from ..chooser import ChooseFileDialog
 from ..modes import Mode, MODE_LOCALES
@@ -15,6 +17,24 @@ class PlaySoundAction(SoundActionBase):
         self.looping_channel = None
         self.active = False
         self.validate_timeout = None
+
+        # Dial DOWN/UP are kept so dial presses behave as they did under ActionBase's legacy dispatch
+        self.add_event_assigner(
+            EventAssigner(
+                id="play_sound_pressed",
+                ui_label=self.plugin_base.lm.get("action.play-sound.event.pressed"),
+                default_events=[Input.Key.Events.DOWN, Input.Dial.Events.DOWN],
+                callback=self.on_pressed,
+            )
+        )
+        self.add_event_assigner(
+            EventAssigner(
+                id="play_sound_released",
+                ui_label=self.plugin_base.lm.get("action.play-sound.event.released"),
+                default_events=[Input.Key.Events.UP, Input.Dial.Events.UP],
+                callback=self.on_released,
+            )
+        )
 
     @property
     def filepath(self) -> str:
@@ -257,7 +277,7 @@ class PlaySoundAction(SoundActionBase):
 
         self.mode = mode
 
-    def on_key_down(self):
+    def on_pressed(self, data) -> None:
         if not self.filepath:
             return
 
@@ -285,7 +305,7 @@ class PlaySoundAction(SoundActionBase):
                 else:
                     self.stop_looping(fadeout=self.fade_out)
 
-    def on_key_up(self):
+    def on_released(self, data) -> None:
         if self.filepath and Mode.RELEASE == self.mode:
             self._play(fade_in=self.fade_in, fade_out=self.fade_out)
 
