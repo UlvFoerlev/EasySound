@@ -168,7 +168,7 @@ class PlaySoundAction(SoundActionBase):
             var_name="section_fades",
             default_value=True,
             title="action.play-sound.section.fades",
-            start_expanded=True,
+            start_expanded=False,
         )
 
         self.fade_in_row = SpinRow(
@@ -205,7 +205,7 @@ class PlaySoundAction(SoundActionBase):
             var_name="section_advanced",
             default_value=True,
             title="action.play-sound.section.advanced",
-            start_expanded=True,
+            start_expanded=False,
         )
 
         self.speakers_row = ComboRow(

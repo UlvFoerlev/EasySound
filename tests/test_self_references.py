@@ -18,6 +18,7 @@ INHERITED = {
     "add_action_holder",
     "add_event_assigner",
     "generative_ui_objects",
+    "get_plugin_id",
     "get_settings",
     "launch_backend",
     "locale_manager",
