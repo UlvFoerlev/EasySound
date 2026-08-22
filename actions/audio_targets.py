@@ -128,3 +128,37 @@ def upsert_group(groups: list[dict], group_id: str, name: str, sinks: list[str])
 
 def delete_group(groups: list[dict], group_id: str) -> list[dict]:
     return [dict(group) for group in groups if group["id"] != group_id]
+
+
+# Symbolic names from the runtime's icon theme, so they recolour with the user's light or dark theme
+ICON_DEFAULT = "audio-card-symbolic"
+ICON_ALL = "view-grid-symbolic"
+ICON_SPEAKER = "audio-speakers-symbolic"
+ICON_HEADSET = "audio-headphones-symbolic"
+ICON_BLUETOOTH = "bluetooth-symbolic"
+ICON_GROUP = "emblem-shared-symbolic"
+ICON_CUSTOM = "document-edit-symbolic"
+ICON_UNAVAILABLE = "dialog-warning-symbolic"
+
+
+def sink_icon(kind: str = "speaker", bluetooth: bool = False) -> str:
+    """Worn beats wireless: a bluetooth headset is more usefully shown as a headset."""
+    if kind == "headset":
+        return ICON_HEADSET
+    if bluetooth:
+        return ICON_BLUETOOTH
+
+    return ICON_SPEAKER
+
+
+def target_icon(target: str) -> str:
+    if target == DEFAULT or not target:
+        return ICON_DEFAULT
+    if target == ALL:
+        return ICON_ALL
+    if target == CUSTOM:
+        return ICON_CUSTOM
+    if target.startswith(GROUP_PREFIX):
+        return ICON_GROUP
+
+    return ICON_SPEAKER

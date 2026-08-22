@@ -160,3 +160,37 @@ def test_target_value_handles_missing_and_odd_values():
     assert target_value(None) == ""
     assert target_value(FakeComboItem(None)) == ""
     assert target_value(7) == ""
+
+
+def test_sink_icons_by_device_type():
+    from actions.audio_targets import (
+        ICON_BLUETOOTH,
+        ICON_HEADSET,
+        ICON_SPEAKER,
+        sink_icon,
+    )
+
+    assert sink_icon("speaker", False) == ICON_SPEAKER
+    assert sink_icon("speaker", True) == ICON_BLUETOOTH
+    assert sink_icon("headset", False) == ICON_HEADSET
+    # A wireless headset is a headset first: that is the more useful thing to show
+    assert sink_icon("headset", True) == ICON_HEADSET
+    assert sink_icon() == ICON_SPEAKER
+
+
+def test_target_icons():
+    from actions.audio_targets import (
+        ICON_ALL,
+        ICON_CUSTOM,
+        ICON_DEFAULT,
+        ICON_GROUP,
+        ICON_SPEAKER,
+        target_icon,
+    )
+
+    assert target_icon(DEFAULT) == ICON_DEFAULT
+    assert target_icon("") == ICON_DEFAULT
+    assert target_icon(ALL) == ICON_ALL
+    assert target_icon(CUSTOM) == ICON_CUSTOM
+    assert target_icon(format_group_target("g1")) == ICON_GROUP
+    assert target_icon(format_sink_target(SINK_A)) == ICON_SPEAKER

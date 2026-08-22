@@ -15,18 +15,30 @@ from ..audio_targets import (
     CUSTOM,
     DEFAULT,
     GROUP_PREFIX,
+    ICON_UNAVAILABLE,
     format_group_target,
     format_sink_target,
     missing_sinks,
     normalize_groups,
     resolve_target,
+    sink_icon,
+    target_icon,
     target_value,
 )
 from ..compat import FileDialogRow
 from ..group_dialog import SpeakerGroupDialog
+from ..icon_combo import IconComboRowItem, icon_factory
 from ..modes import MODE_LOCALES, Mode
 from ..sound_action_base import SoundActionBase
-from ..spatial import channel_gains, clamp_position, normalize_positions, stereo_balance
+from ..spatial import (
+    DEFAULT_ROOM_SIZE,
+    channel_gains,
+    clamp_position,
+    clamp_room_size,
+    normalize_positions,
+    source_delays,
+    stereo_balance,
+)
 from ..spatial_dialog import SpatialDialog
 
 # Glob patterns, not MIME types: FileDialogFilter takes patterns
@@ -229,6 +241,7 @@ class PlaySoundAction(SoundActionBase):
             on_change=self.on_speakers_change,
             auto_add=False,
         )
+        self.speakers_row.widget.set_factory(icon_factory())
         self.advanced_section.add_row(self.speakers_row.widget)
 
         self.spatial_row = SwitchRow(
@@ -320,6 +333,44 @@ class PlaySoundAction(SoundActionBase):
     def save_spatial_source(self, source) -> None:
         self._set_property(key="spatial_source", value=list(clamp_position(source)))
 
+    def room_settings(self) -> tuple[float, bool]:
+        # The room and its delay switch describe the physical setup, so they live with the plugin
+        settings = self.plugin_base.get_settings()
+
+        return (
+            clamp_room_size(settings.get("room_size", DEFAULT_ROOM_SIZE)),
+            bool(settings.get("spatial_delay", False)),
+        )
+
+    def save_room_settings(self, room_size: float, delay_enabled: bool) -> None:
+        settings = self.plugin_base.get_settings()
+        settings["room_size"] = clamp_room_size(room_size)
+        settings["spatial_delay"] = bool(delay_enabled)
+        self.plugin_base.set_settings(settings)
+
+    def spatial_delays(self, sinks: list[str] | None) -> list[float] | None:
+        if not self.spatial_enabled or not sinks:
+            return None
+
+        room_size, delay_enabled = self.room_settings()
+        headsets = self.headset_sinks()
+        speakers = [sink for sink in sinks if sink not in headsets]
+
+        # Delays need two speakers to mean anything, and a worn device has no flight time at all
+        if not delay_enabled or len(speakers) < 2:
+            return None
+
+        positions = self.speaker_positions()
+        delays = source_delays(
+            self.spatial_source,
+            {sink: positions.get(sink, (0.0, 0.0)) for sink in speakers},
+            room_size,
+        )
+        return [delays.get(sink, 0.0) for sink in sinks]
+
+    def headset_sinks(self) -> set[str]:
+        return {sink["name"] for sink in self.list_sinks() if sink.get("kind") == "headset"}
+
     def spatial_gains(self, sinks: list[str] | None) -> list[list[float]] | None:
         if not self.spatial_enabled:
             return None
@@ -330,12 +381,21 @@ class PlaySoundAction(SoundActionBase):
         if sinks is None:
             return [list(stereo_balance(source[0]))]
 
-        per_sink = channel_gains(source, sinks, self.speaker_positions())
+        per_sink = channel_gains(
+            source, sinks, self.speaker_positions(), self.headset_sinks()
+        )
         return [list(per_sink.get(sink, (1.0, 1.0))) for sink in sinks]
 
     def on_spatial_clicked(self, _button):
-        sinks = self.resolve_sinks() or []
-        labels = {sink["name"]: sink["label"] for sink in self.list_sinks()}
+        available = self.list_sinks()
+        labels = {sink["name"]: sink["label"] for sink in available}
+        room_size, delay_enabled = self.room_settings()
+
+        # "Default" resolves to whichever sink the server currently prefers, so the map is never empty
+        sinks = self.resolve_sinks()
+        if sinks is None:
+            default = next((sink["name"] for sink in available if sink["is_default"]), None)
+            sinks = [default] if default else []
 
         # Held so the dialog outlives this call
         self.spatial_dialog = SpatialDialog(
@@ -346,6 +406,10 @@ class PlaySoundAction(SoundActionBase):
             source=self.spatial_source,
             on_positions_changed=self.save_speaker_positions,
             on_source_changed=self.save_spatial_source,
+            room_size=room_size,
+            delay_enabled=delay_enabled,
+            on_room_changed=self.save_room_settings,
+            headsets=self.headset_sinks(),
         )
         self.spatial_dialog.present(self.spatial_button_row)
 
@@ -358,21 +422,35 @@ class PlaySoundAction(SoundActionBase):
         available = [sink["name"] for sink in self.list_sinks()]
         return resolve_target(target, available, self.speaker_groups())
 
-    def speaker_items(self) -> list[SimpleComboRowItem]:
+    def speaker_items(self) -> list[IconComboRowItem]:
         lm = self.plugin_base.lm
         items = [
-            SimpleComboRowItem(
-                value=DEFAULT, label=lm.get("action.play-sound.speakers.default")
+            IconComboRowItem(
+                value=DEFAULT,
+                label=lm.get("action.play-sound.speakers.default"),
+                icon_name=target_icon(DEFAULT),
             ),
-            SimpleComboRowItem(value=ALL, label=lm.get("action.play-sound.speakers.all")),
+            IconComboRowItem(
+                value=ALL,
+                label=lm.get("action.play-sound.speakers.all"),
+                icon_name=target_icon(ALL),
+            ),
         ]
 
         items += [
-            SimpleComboRowItem(value=format_sink_target(sink["name"]), label=sink["label"])
+            IconComboRowItem(
+                value=format_sink_target(sink["name"]),
+                label=sink["label"],
+                icon_name=sink_icon(sink.get("kind", "speaker"), sink.get("bluetooth", False)),
+            )
             for sink in self.list_sinks()
         ]
         items += [
-            SimpleComboRowItem(value=format_group_target(group["id"]), label=group["name"])
+            IconComboRowItem(
+                value=format_group_target(group["id"]),
+                label=group["name"],
+                icon_name=target_icon(format_group_target(group["id"])),
+            )
             for group in self.speaker_groups()
         ]
 
@@ -380,11 +458,19 @@ class PlaySoundAction(SoundActionBase):
         target = self.speakers
         if target and target not in {item.get_value() for item in items}:
             items.append(
-                SimpleComboRowItem(value=target, label=self.unavailable_label(target))
+                IconComboRowItem(
+                    value=target,
+                    label=self.unavailable_label(target),
+                    icon_name=ICON_UNAVAILABLE,
+                )
             )
 
         items.append(
-            SimpleComboRowItem(value=CUSTOM, label=lm.get("action.play-sound.speakers.custom"))
+            IconComboRowItem(
+                value=CUSTOM,
+                label=lm.get("action.play-sound.speakers.custom"),
+                icon_name=target_icon(CUSTOM),
+            )
         )
         return items
 
@@ -439,6 +525,7 @@ class PlaySoundAction(SoundActionBase):
                     sinks=sinks,
                     volume=self.volume,
                     gains=self.spatial_gains(sinks),
+                    delays=self.spatial_delays(sinks),
                     **kwargs,
                 )
             except Exception:

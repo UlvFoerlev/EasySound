@@ -5,6 +5,75 @@ from typing import Any
 BLUR = 0.25
 ROLLOFF = 2.0
 
+SPEED_OF_SOUND = 343.0
+DEFAULT_ROOM_SIZE = 4.0
+MIN_ROOM_SIZE = 1.0
+MAX_ROOM_SIZE = 30.0
+# Beyond this a "delay" is just a late echo, so it is clamped rather than trusted
+MAX_DELAY_SECONDS = 0.05
+
+
+def clamp_room_size(value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_ROOM_SIZE
+
+    if math.isnan(number):
+        return DEFAULT_ROOM_SIZE
+
+    return max(MIN_ROOM_SIZE, min(MAX_ROOM_SIZE, number))
+
+
+def unit_to_metres(room_size: Any) -> float:
+    """The map spans the room's full width, so one unit of map is half the room."""
+    return clamp_room_size(room_size) / 2.0
+
+
+def distance_metres(
+    point_a: tuple[float, float],
+    point_b: tuple[float, float],
+    room_size: Any = DEFAULT_ROOM_SIZE,
+) -> float:
+    scale = unit_to_metres(room_size)
+
+    return math.hypot(point_a[0] - point_b[0], point_a[1] - point_b[1]) * scale
+
+
+def listener_distances(
+    positions: dict[str, tuple[float, float]],
+    room_size: Any = DEFAULT_ROOM_SIZE,
+) -> dict[str, float]:
+    """Metres from the listener to each speaker, for the arrows drawn on the map."""
+    return {
+        sink: round(distance_metres((0.0, 0.0), point, room_size), 2)
+        for sink, point in positions.items()
+    }
+
+
+def source_delays(
+    source: Any,
+    positions: dict[str, tuple[float, float]],
+    room_size: Any = DEFAULT_ROOM_SIZE,
+) -> dict[str, float]:
+    """Seconds each speaker waits so the wavefronts superpose as if they left the source."""
+    if not positions:
+        return {}
+
+    point = clamp_position(source)
+    distances = {
+        sink: distance_metres(point, speaker, room_size)
+        for sink, speaker in positions.items()
+    }
+    earliest = min(distances.values())
+
+    return {
+        sink: round(
+            min((distance - earliest) / SPEED_OF_SOUND, MAX_DELAY_SECONDS), 6
+        )
+        for sink, distance in distances.items()
+    }
+
 
 def clamp_unit(value: Any) -> float:
     try:
@@ -88,21 +157,80 @@ def stereo_balance(source_x: float) -> tuple[float, float]:
     return (1.0 if x <= 0 else round(1.0 - x, 6), 1.0 if x >= 0 else round(1.0 + x, 6))
 
 
+LEFT = "left"
+RIGHT = "right"
+EAR_SEPARATION = 0.3
+
+
+def emitter_id(sink: str, side: str | None = None) -> str:
+    """A speaker is one emitter; a headset is two, one per ear, each placed on its own."""
+    return sink if side is None else f"{sink}#{side}"
+
+
+def emitters_for(sink: str, is_headset: bool) -> list[str]:
+    if is_headset:
+        return [emitter_id(sink, LEFT), emitter_id(sink, RIGHT)]
+
+    return [emitter_id(sink)]
+
+
+def default_emitter_position(emitter: str) -> tuple[float, float]:
+    # Ears sit either side of the listener, so a headset starts as a head-width pair
+    if emitter.endswith(f"#{LEFT}"):
+        return (-EAR_SEPARATION, 0.0)
+    if emitter.endswith(f"#{RIGHT}"):
+        return (EAR_SEPARATION, 0.0)
+
+    return (0.0, 0.0)
+
+
+def emitter_layout(
+    sinks: list[str],
+    headsets: set[str] | None = None,
+    positions: dict[str, tuple[float, float]] | None = None,
+) -> dict[str, tuple[float, float]]:
+    headsets = headsets or set()
+    positions = positions or {}
+    layout = {}
+
+    for sink in sinks:
+        for emitter in emitters_for(sink, sink in headsets):
+            layout[emitter] = positions.get(emitter, default_emitter_position(emitter))
+
+    return layout
+
+
 def channel_gains(
     source: Any,
     sinks: list[str],
     positions: dict[str, tuple[float, float]] | None = None,
+    headsets: set[str] | None = None,
 ) -> dict[str, tuple[float, float]]:
-    """Final per-sink, per-channel gains: speaker placement combined with left/right balance."""
+    """Per-sink left/right gains, panned by where each emitter sits relative to the source."""
     point = clamp_position(source)
-    positions = positions or {}
-
-    # A sink with no saved position sits at the listener rather than being left out of the panning
-    layout = {sink: positions.get(sink, (0.0, 0.0)) for sink in sinks}
+    headsets = headsets or set()
+    layout = emitter_layout(sinks, headsets, positions)
     gains = dbap_gains(point, layout)
-    left, right = stereo_balance(point[0])
 
-    return {
-        sink: (round(gain * left, 6), round(gain * right, 6))
-        for sink, gain in gains.items()
-    }
+    # With a single emitter there is no geometry to pan across, so balance provides the only cue
+    lone = len(layout) == 1
+    left, right = stereo_balance(point[0]) if lone else (1.0, 1.0)
+
+    # A single device is max-normalised so enabling spatial never changes its overall level
+    if len(sinks) == 1 and gains:
+        loudest = max(gains.values())
+        if loudest > 0:
+            gains = {emitter: gain / loudest for emitter, gain in gains.items()}
+
+    channels = {}
+    for sink in sinks:
+        if sink in headsets:
+            channels[sink] = (
+                round(gains.get(emitter_id(sink, LEFT), 1.0), 6),
+                round(gains.get(emitter_id(sink, RIGHT), 1.0), 6),
+            )
+        else:
+            gain = gains.get(emitter_id(sink), 1.0)
+            channels[sink] = (round(gain * left, 6), round(gain * right, 6))
+
+    return channels

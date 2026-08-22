@@ -107,17 +107,14 @@ def test_stereo_balance_pans_without_boosting():
     assert left == 1.0 and right == 0.5
 
 
-def test_channel_gains_combine_placement_and_balance():
+def test_two_speakers_pan_by_placement_not_within_each_speaker():
     positions = {"left": LEFT, "right": RIGHT}
     gains = channel_gains([-0.8, 0.0], ["left", "right"], positions)
 
-    # source to the left: the left speaker is loudest, and every right channel is attenuated
     assert gains["left"][0] > gains["right"][0]
-    assert gains["left"][1] < gains["left"][0]
-    assert gains["right"][1] < gains["right"][0]
-
-    # only a fully lateral source mutes the opposite channel
-    assert channel_gains([-1.0, 0.0], ["left"], {"left": LEFT})["left"][1] == 0.0
+    # A real speaker's drivers do not move, so with geometry available its channels stay level
+    assert gains["left"][0] == gains["left"][1]
+    assert gains["right"][0] == gains["right"][1]
 
 
 def test_channel_gains_for_one_headset_keeps_direction():
@@ -140,3 +137,148 @@ def test_channel_gains_tolerates_missing_positions():
 def test_channel_gains_ignores_unknown_sinks_in_positions():
     gains = channel_gains([0.0, 0.0], ["a"], {"a": FRONT, "ghost": BACK})
     assert set(gains) == {"a"}
+
+
+def test_room_size_is_clamped_and_defaults_safely():
+    from actions.spatial import DEFAULT_ROOM_SIZE, MAX_ROOM_SIZE, MIN_ROOM_SIZE, clamp_room_size
+
+    assert clamp_room_size(6.0) == 6.0
+    assert clamp_room_size(0.1) == MIN_ROOM_SIZE
+    assert clamp_room_size(500) == MAX_ROOM_SIZE
+    assert clamp_room_size("nope") == DEFAULT_ROOM_SIZE
+    assert clamp_room_size(None) == DEFAULT_ROOM_SIZE
+    assert clamp_room_size(float("nan")) == DEFAULT_ROOM_SIZE
+
+
+def test_the_map_spans_the_full_room_width():
+    from actions.spatial import distance_metres
+
+    # a 4 m room: the edge of the map is 2 m from the listener at the centre
+    assert distance_metres((0.0, 0.0), (0.0, 1.0), 4.0) == 2.0
+    assert distance_metres((0.0, 0.0), (0.0, 0.5), 4.0) == 1.0
+
+
+def test_listener_distances_for_the_arrows():
+    from actions.spatial import listener_distances
+
+    distances = listener_distances({"front": (0.0, 1.0), "near": (0.0, 0.25)}, 8.0)
+    assert distances == {"front": 4.0, "near": 1.0}
+
+
+def test_the_speaker_nearest_the_source_fires_first():
+    from actions.spatial import source_delays
+
+    delays = source_delays(BACK, {"front": FRONT, "back": BACK}, 4.0)
+    assert delays["back"] == 0.0
+    assert delays["front"] > 0.0
+
+
+def test_delay_matches_the_speed_of_sound():
+    from actions.spatial import SPEED_OF_SOUND, source_delays
+
+    # a 10 m room: the source sits on the front speaker, so the back one is 10 m further away
+    delays = source_delays((0.0, 1.0), {"front": (0.0, 1.0), "back": (0.0, -1.0)}, 10.0)
+    assert delays["front"] == 0.0
+    assert math.isclose(delays["back"], 10.0 / SPEED_OF_SOUND, abs_tol=0.0005)
+
+
+def test_a_single_speaker_never_waits():
+    from actions.spatial import source_delays
+
+    # With nothing to be early or late against, a lone speaker is its own reference
+    assert source_delays((0.0, 1.0), {"only": (0.0, -1.0)}, 30.0) == {"only": 0.0}
+
+
+def test_delay_is_capped():
+    from actions.spatial import MAX_DELAY_SECONDS, source_delays
+
+    # 30 m apart is 87 ms of flight time, which is an echo rather than a spatial cue
+    delays = source_delays(
+        (0.0, 1.0), {"near": (0.0, 1.0), "far": (0.0, -1.0)}, 30.0
+    )
+    assert delays["far"] == MAX_DELAY_SECONDS
+
+
+def test_equidistant_speakers_share_a_delay():
+    from actions.spatial import source_delays
+
+    delays = source_delays((0.0, 0.0), {"left": LEFT, "right": RIGHT}, 5.0)
+    assert delays["left"] == delays["right"] == 0.0
+
+
+def test_source_delays_with_no_speakers():
+    from actions.spatial import source_delays
+
+    assert source_delays(FRONT, {}, 4.0) == {}
+
+
+def test_every_requested_sink_gets_a_gain():
+    gains = channel_gains(FRONT, ["a", "ears"], {"a": FRONT}, headsets={"ears"})
+    assert set(gains) == {"a", "ears"}
+
+
+def test_one_device_keeps_its_level_when_spatial_is_enabled():
+    # Toggling spatial must not make a lone device quieter, so a single-device pool is max-normalised
+    assert max(channel_gains((0.0, 0.0), ["hs"], {}, headsets={"hs"})["hs"]) == 1.0
+    assert max(channel_gains((-0.7, 0.2), ["hs"], {}, headsets={"hs"})["hs"]) == 1.0
+
+
+def test_emitter_ids_and_defaults():
+    from actions.spatial import EAR_SEPARATION, default_emitter_position, emitter_id, emitters_for
+
+    assert emitter_id("sink") == "sink"
+    assert emitter_id("sink", "left") == "sink#left"
+    assert emitters_for("spk", is_headset=False) == ["spk"]
+    assert emitters_for("hs", is_headset=True) == ["hs#left", "hs#right"]
+
+    assert default_emitter_position("hs#left") == (-EAR_SEPARATION, 0.0)
+    assert default_emitter_position("hs#right") == (EAR_SEPARATION, 0.0)
+    assert default_emitter_position("spk") == (0.0, 0.0)
+
+
+def test_emitter_layout_splits_only_headsets():
+    from actions.spatial import emitter_layout
+
+    layout = emitter_layout(["spk", "hs"], headsets={"hs"}, positions={"spk": FRONT})
+    assert set(layout) == {"spk", "hs#left", "hs#right"}
+    assert layout["spk"] == FRONT
+
+
+def test_a_headset_pans_left_and_right_by_geometry():
+    gains = channel_gains(LEFT, ["hs"], {}, headsets={"hs"})
+    left, right = gains["hs"]
+    assert left > right
+
+
+def test_a_headset_is_centred_when_the_sound_is_centred():
+    left, right = channel_gains((0.0, 0.0), ["hs"], {}, headsets={"hs"})["hs"]
+    assert math.isclose(left, right)
+
+
+def test_a_headset_cannot_tell_front_from_back():
+    # Honest limitation: with equal ear distances, amplitude alone carries no front/back cue
+    front = channel_gains((0.0, 0.9), ["hs"], {}, headsets={"hs"})["hs"]
+    back = channel_gains((0.0, -0.9), ["hs"], {}, headsets={"hs"})["hs"]
+    assert front == back
+
+
+def test_earpieces_can_be_placed_individually():
+    positions = {"hs#left": (-0.9, 0.0), "hs#right": (0.9, 0.0)}
+    wide = channel_gains((-0.9, 0.0), ["hs"], positions, headsets={"hs"})["hs"]
+    narrow = channel_gains((-0.9, 0.0), ["hs"], {}, headsets={"hs"})["hs"]
+
+    # Ears further apart give a stronger separation for the same source
+    assert wide[0] - wide[1] > narrow[0] - narrow[1]
+
+
+def test_a_headset_and_speakers_share_one_pool():
+    positions = {"spk": FRONT}
+    gains = channel_gains(FRONT, ["spk", "hs"], positions, headsets={"hs"})
+
+    # The speaker sits on the source, so it should dominate both ears of the headset
+    assert gains["spk"][0] > max(gains["hs"])
+
+
+def test_a_lone_speaker_still_gets_a_balance_cue():
+    left, right = channel_gains((-1.0, 0.0), ["spk"], {"spk": FRONT})["spk"]
+    assert left > right

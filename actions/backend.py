@@ -15,6 +15,32 @@ MAX_CONCURRENT_STREAMS = 32
 SAMPLE_FORMAT = pasimple.PA_SAMPLE_S16LE
 
 
+# Worn devices: placing them in a room makes no sense, so they are treated apart from speakers
+HEADSET_HINTS = ("headset", "headphone", "earbud", "earphone", "hands-free")
+HEADSET = "headset"
+SPEAKER = "speaker"
+
+
+def sink_kind(proplist, active_port: str = "") -> str:
+    """Best-effort device type; form factor is authoritative, the active port covers internal cards."""
+    form_factor = (proplist.get("device.form_factor") or "").lower()
+    if form_factor:
+        return HEADSET if any(hint in form_factor for hint in HEADSET_HINTS) else SPEAKER
+
+    # An internal card exposes headphones as a port of the same sink rather than as its own sink
+    haystack = f"{active_port} {proplist.get('device.icon_name') or ''}".lower()
+
+    return HEADSET if any(hint in haystack for hint in HEADSET_HINTS) else SPEAKER
+
+
+def is_bluetooth(proplist, sink_name: str = "") -> bool:
+    # bluez names the sink after the adapter, which is a reliable fallback when the bus is unset
+    if (proplist.get("device.bus") or "").lower() == "bluetooth":
+        return True
+
+    return sink_name.startswith("bluez_")
+
+
 def channel_weights(channel_gain: list[float] | None, channels: int):
     """Spreads a left/right spatial gain across a sound's actual channel count."""
     if not channel_gain:
@@ -93,11 +119,14 @@ class Backend(BackendBase):
                         or sink.description
                         or sink.name
                     )
+                    active_port = getattr(getattr(sink, "port_active", None), "name", "") or ""
                     sinks.append(
                         {
                             "name": sink.name,
                             "label": label,
                             "is_default": sink.name == default_name,
+                            "kind": sink_kind(props, active_port),
+                            "bluetooth": is_bluetooth(props, sink.name),
                         }
                     )
 
@@ -137,6 +166,7 @@ class Backend(BackendBase):
         fade_in: float = 0.0,
         fade_out: float = 0.0,
         gains: list[list[float]] | None = None,
+        delays: list[float] | None = None,
     ) -> str | None:
         key = path if isinstance(path, str) else str(path)
 
@@ -144,6 +174,9 @@ class Backend(BackendBase):
             return None
 
         _, rate, channels = self.cache[key]
+        # A mono sound has no sides to pan, so spatial playback upmixes it to stereo first
+        play_channels = 2 if gains and channels == 1 else channels
+
         # None means "whatever the server considers default", which is one stream, not zero
         targets = [None] if sinks is None else list(sinks)
         if not targets:
@@ -152,10 +185,11 @@ class Backend(BackendBase):
         # Spatial gains arrive parallel to targets, so a stream that fails to open drops its entry too
         opened = []
         for index, sink in enumerate(targets):
-            stream = self._open_stream(sink=sink, rate=rate, channels=channels)
+            stream = self._open_stream(sink=sink, rate=rate, channels=play_channels)
             if stream is not None:
                 channel_gain = gains[index] if gains and index < len(gains) else None
-                opened.append((stream, channel_weights(channel_gain, channels)))
+                delay = delays[index] if delays and index < len(delays) else 0.0
+                opened.append((stream, channel_weights(channel_gain, play_channels), delay))
 
         # A partial fan-out still counts as playing: one dead speaker must not fail the whole group
         if not opened:
@@ -170,10 +204,22 @@ class Backend(BackendBase):
             self.playbacks[handle] = playback
             playback.writers = len(opened)
 
-        for stream, weights in opened:
+        for stream, weights, delay in opened:
             Thread(
                 target=self._pump,
-                args=(handle, playback, stream, weights, key, gain, loops, fade_in, fade_out),
+                args=(
+                    handle,
+                    playback,
+                    stream,
+                    weights,
+                    delay,
+                    play_channels,
+                    key,
+                    gain,
+                    loops,
+                    fade_in,
+                    fade_out,
+                ),
                 daemon=True,
             ).start()
 
@@ -213,6 +259,8 @@ class Backend(BackendBase):
         playback: Playback,
         stream,
         weights,
+        delay: float,
+        play_channels: int,
         key: str,
         gain: float,
         loops: int,
@@ -220,8 +268,13 @@ class Backend(BackendBase):
         fade_out: float,
     ) -> None:
         try:
-            samples, rate, _ = self.cache[key]
+            samples, rate, channels = self.cache[key]
             total = len(samples)
+
+            # Wavefront delay: silence written up front, so this speaker starts late by that much
+            pad = int(max(delay, 0.0) * rate)
+            if pad:
+                stream.write(np.zeros((pad, play_channels), dtype=np.int16).tobytes())
             fade_in_frames = int(fade_in * rate)
             fade_out_frames = int(fade_out * rate)
 
@@ -260,6 +313,9 @@ class Backend(BackendBase):
                     envelope *= np.clip(1.0 - (frames - stop_at) / stop_frames, 0.0, 1.0)
 
                 chunk = samples[position : position + count].astype(np.float32)
+                if play_channels != channels:
+                    chunk = np.repeat(chunk, play_channels // channels, axis=1)
+
                 shaped = chunk * (gain * envelope)[:, None] * weights
                 stream.write(shaped.astype(np.int16).tobytes())
 

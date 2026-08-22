@@ -9,6 +9,7 @@ MODULES = [
     REPO_ROOT / "actions" / "play_sound" / "play_sound.py",
     REPO_ROOT / "actions" / "group_dialog.py",
     REPO_ROOT / "actions" / "spatial_dialog.py",
+    REPO_ROOT / "actions" / "icon_combo.py",
     REPO_ROOT / "main.py",
 ]
 

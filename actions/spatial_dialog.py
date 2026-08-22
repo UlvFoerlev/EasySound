@@ -7,16 +7,31 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gtk
 
-from .spatial import channel_gains, clamp_unit, default_layout
+from .spatial import (
+    LEFT,
+    MAX_ROOM_SIZE,
+    MIN_ROOM_SIZE,
+    RIGHT,
+    clamp_room_size,
+    clamp_unit,
+    dbap_gains,
+    default_emitter_position,
+    default_layout,
+    emitter_layout,
+    emitters_for,
+    listener_distances,
+    source_delays,
+)
 
 CANVAS_SIZE = 420
 HANDLE_RADIUS = 13.0
-PICK_RADIUS = 30.0
+EAR_RADIUS = 10.0
+PICK_RADIUS = 26.0
 SOURCE_KEY = "\x00source"
 
 
 class SpatialDialog(Adw.Dialog):
-    """Top-down map: the listener sits at the centre, speakers and the sound source are draggable."""
+    """Top-down map: the listener sits at the centre, and every emitter and the source are draggable."""
 
     def __init__(
         self,
@@ -27,6 +42,10 @@ class SpatialDialog(Adw.Dialog):
         source: tuple[float, float],
         on_positions_changed: Callable[[dict[str, tuple[float, float]]], None],
         on_source_changed: Callable[[tuple[float, float]], None],
+        room_size: float = 4.0,
+        delay_enabled: bool = False,
+        on_room_changed: Callable[[float, bool], None] | None = None,
+        headsets: set[str] | None = None,
     ):
         super().__init__()
 
@@ -36,17 +55,19 @@ class SpatialDialog(Adw.Dialog):
         self.source = source
         self.on_positions_changed = on_positions_changed
         self.on_source_changed = on_source_changed
+        self.on_room_changed = on_room_changed
+        self.room_size = clamp_room_size(room_size)
+        self.delay_enabled = bool(delay_enabled)
+        # A headset is two emitters, one per ear, so its channels can be panned by geometry
+        self.headsets = {sink for sink in (headsets or set()) if sink in self.sinks}
         self.dragging: str | None = None
 
-        # Speakers without a saved spot start on a ring rather than stacked on the listener
-        ring = default_layout([sink for sink in self.sinks if sink not in positions])
-        self.positions = {
-            sink: positions.get(sink, ring.get(sink, (0.0, 0.0))) for sink in self.sinks
-        }
+        self.positions = emitter_layout(self.sinks, self.headsets, positions)
+        self.ring_unplaced(positions)
 
         self.set_title(self.lm.get("action.play-sound.spatial.title"))
         self.set_content_width(CANVAS_SIZE + 60)
-        self.set_content_height(CANVAS_SIZE + 190)
+        self.set_content_height(CANVAS_SIZE + 260)
 
         self.canvas = Gtk.DrawingArea(hexpand=True, vexpand=True)
         self.canvas.set_size_request(CANVAS_SIZE, CANVAS_SIZE)
@@ -58,15 +79,31 @@ class SpatialDialog(Adw.Dialog):
         drag.connect("drag-end", self.on_drag_end)
         self.canvas.add_controller(drag)
 
-        hint = self.lm.get(
-            "action.play-sound.spatial.hint"
-            if self.sinks
-            else "action.play-sound.spatial.hint-default"
+        self.hint_label = Gtk.Label(
+            label=self.lm.get(self.hint_key()), wrap=True, css_classes=["dim-label"]
         )
-        self.hint_label = Gtk.Label(label=hint, wrap=True, css_classes=["dim-label"])
 
         reset = Gtk.Button(label=self.lm.get("action.play-sound.spatial.reset"))
         reset.connect("clicked", self.on_reset)
+
+        # Off by default: without a room size the distances are meaningless, and delays are a real risk
+        self.delay_row = Adw.SwitchRow(
+            title=self.lm.get("action.play-sound.spatial.delay"),
+            subtitle=self.lm.get("action.play-sound.spatial.delay-subtitle"),
+            active=self.delay_enabled,
+        )
+        self.delay_row.connect("notify::active", self.on_delay_toggled)
+
+        self.room_row = Adw.SpinRow.new_with_range(MIN_ROOM_SIZE, MAX_ROOM_SIZE, 0.5)
+        self.room_row.set_title(self.lm.get("action.play-sound.spatial.room"))
+        self.room_row.set_subtitle(self.lm.get("action.play-sound.spatial.room-subtitle"))
+        self.room_row.set_value(self.room_size)
+        self.room_row.set_sensitive(self.delay_enabled)
+        self.room_row.connect("changed", self.on_room_size_changed)
+
+        settings_group = Adw.PreferencesGroup()
+        settings_group.add(self.delay_row)
+        settings_group.add(self.room_row)
 
         content = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
@@ -78,12 +115,50 @@ class SpatialDialog(Adw.Dialog):
         )
         content.append(self.canvas)
         content.append(self.hint_label)
+        content.append(settings_group)
         content.append(reset)
 
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
-        view.set_content(content)
+        view.set_content(Gtk.ScrolledWindow(child=content, propagate_natural_height=True))
         self.set_child(view)
+
+    def ring_unplaced(self, saved: dict) -> None:
+        # Speakers with no saved spot spread onto a ring instead of stacking on the listener
+        unplaced = [
+            sink for sink in self.sinks if sink not in self.headsets and sink not in saved
+        ]
+        self.positions.update(default_layout(unplaced))
+
+    def hint_key(self) -> str:
+        if not self.sinks:
+            return "action.play-sound.spatial.hint-default"
+        if self.sinks and set(self.sinks) == self.headsets:
+            return "action.play-sound.spatial.hint-headset"
+
+        return "action.play-sound.spatial.hint"
+
+    def emitter_label(self, emitter: str) -> str:
+        sink, _, side = emitter.partition("#")
+        label = self.labels.get(sink, sink)[:14]
+
+        if side == LEFT:
+            return f"{label} [{self.lm.get('action.play-sound.spatial.left')}]"
+        if side == RIGHT:
+            return f"{label} [{self.lm.get('action.play-sound.spatial.right')}]"
+
+        return label
+
+    def is_ear(self, emitter: str) -> bool:
+        return "#" in emitter
+
+    def speaker_emitters(self) -> dict[str, tuple[float, float]]:
+        # Ears travel with the listener, so they are left out of room distances and delays
+        return {
+            emitter: point
+            for emitter, point in self.positions.items()
+            if not self.is_ear(emitter)
+        }
 
     def geometry(self) -> tuple[float, float, float]:
         width = self.canvas.get_width() or CANVAS_SIZE
@@ -103,7 +178,7 @@ class SpatialDialog(Adw.Dialog):
         return clamp_unit((x - cx) / scale), clamp_unit(-(y - cy) / scale)
 
     def handles(self) -> dict[str, tuple[float, float]]:
-        handles = {sink: self.positions[sink] for sink in self.sinks}
+        handles = dict(self.positions)
         handles[SOURCE_KEY] = self.source
 
         return handles
@@ -127,24 +202,39 @@ class SpatialDialog(Adw.Dialog):
         cr.line_to(cx, cy + scale)
         cr.stroke()
 
-        # Gain feedback: a speaker's fill shows how much of this sound it would carry
-        gains = channel_gains(self.source, self.sinks, self.positions)
+        cr.select_font_face("Sans")
+        cr.set_font_size(11)
 
-        for sink in self.sinks:
-            sx, sy = self.to_screen(self.positions[sink])
-            left, right = gains.get(sink, (0.0, 0.0))
-            strength = max(left, right)
+        # Fill brightness shows how much of the sound each emitter would carry
+        gains = dbap_gains(self.source, self.positions)
+        speakers = self.speaker_emitters()
+        distances = listener_distances(speakers, self.room_size) if self.delay_enabled else {}
+        delays = (
+            source_delays(self.source, speakers, self.room_size) if self.delay_enabled else {}
+        )
+
+        if self.delay_enabled:
+            for emitter, point in speakers.items():
+                sx, sy = self.to_screen(point)
+                self.draw_arrow(cr, cx, cy, sx, sy)
+                self.draw_badge(cr, (cx + sx) / 2, (cy + sy) / 2, f"{distances.get(emitter, 0.0):.1f} m")
+
+        for emitter, point in self.positions.items():
+            sx, sy = self.to_screen(point)
+            radius = EAR_RADIUS if self.is_ear(emitter) else HANDLE_RADIUS
+            strength = gains.get(emitter, 0.0)
 
             cr.set_source_rgba(0.35, 0.75, 1.0, 0.25 + 0.65 * strength)
-            cr.arc(sx, sy, HANDLE_RADIUS, 0, math.tau)
+            cr.arc(sx, sy, radius, 0, math.tau)
             cr.fill()
 
+            label = self.emitter_label(emitter)
+            if self.delay_enabled and delays.get(emitter):
+                label = f"{label}  +{delays[emitter] * 1000:.0f} ms"
+
             cr.set_source_rgba(1, 1, 1, 0.85)
-            cr.select_font_face("Sans")
-            cr.set_font_size(11)
-            label = self.labels.get(sink, sink)[:14]
             extents = cr.text_extents(label)
-            cr.move_to(sx - extents.width / 2, sy + HANDLE_RADIUS + 14)
+            cr.move_to(sx - extents.width / 2, sy + radius + 13)
             cr.show_text(label)
 
         cr.set_source_rgba(1, 1, 1, 0.55)
@@ -152,6 +242,7 @@ class SpatialDialog(Adw.Dialog):
         cr.fill()
         listener = self.lm.get("action.play-sound.spatial.listener")
         extents = cr.text_extents(listener)
+        cr.set_source_rgba(1, 1, 1, 0.85)
         cr.move_to(cx - extents.width / 2, cy + 22)
         cr.show_text(listener)
 
@@ -163,6 +254,66 @@ class SpatialDialog(Adw.Dialog):
         cr.set_line_width(2.0)
         cr.arc(srx, sry, HANDLE_RADIUS - 2, 0, math.tau)
         cr.stroke()
+
+        source_label = self.lm.get("action.play-sound.spatial.source")
+        extents = cr.text_extents(source_label)
+        cr.set_source_rgba(1, 1, 1, 0.85)
+        cr.move_to(srx - extents.width / 2, sry + HANDLE_RADIUS + 12)
+        cr.show_text(source_label)
+
+    def draw_badge(self, cr, x, y, text):
+        extents = cr.text_extents(text)
+
+        cr.set_source_rgba(0.10, 0.11, 0.13, 0.85)
+        cr.rectangle(
+            x - extents.width / 2 - 4, y - extents.height - 4, extents.width + 8, extents.height + 8
+        )
+        cr.fill()
+
+        cr.set_source_rgba(1, 1, 1, 0.9)
+        cr.move_to(x - extents.width / 2, y)
+        cr.show_text(text)
+
+    def draw_arrow(self, cr, from_x, from_y, to_x, to_y):
+        angle = math.atan2(to_y - from_y, to_x - from_x)
+        # Stop short of the dot so the head is not hidden underneath it
+        tip_x = to_x - math.cos(angle) * (HANDLE_RADIUS + 2)
+        tip_y = to_y - math.sin(angle) * (HANDLE_RADIUS + 2)
+        head = 8.0
+        spread = 0.4
+
+        cr.set_source_rgba(1, 1, 1, 0.35)
+        cr.set_line_width(1.5)
+        cr.move_to(from_x, from_y)
+        cr.line_to(tip_x, tip_y)
+        cr.stroke()
+
+        cr.move_to(tip_x, tip_y)
+        cr.line_to(
+            tip_x - math.cos(angle - spread) * head, tip_y - math.sin(angle - spread) * head
+        )
+        cr.line_to(
+            tip_x - math.cos(angle + spread) * head, tip_y - math.sin(angle + spread) * head
+        )
+        cr.close_path()
+        cr.fill()
+
+    def on_delay_toggled(self, row, _param):
+        self.delay_enabled = row.get_active()
+        self.room_row.set_sensitive(self.delay_enabled)
+
+        self.commit_room()
+        self.canvas.queue_draw()
+
+    def on_room_size_changed(self, row):
+        self.room_size = clamp_room_size(row.get_value())
+
+        self.commit_room()
+        self.canvas.queue_draw()
+
+    def commit_room(self):
+        if self.on_room_changed is not None:
+            self.on_room_changed(self.room_size, self.delay_enabled)
 
     def on_drag_begin(self, gesture, start_x, start_y):
         self.dragging = None
@@ -203,9 +354,16 @@ class SpatialDialog(Adw.Dialog):
         self.dragging = None
 
     def on_reset(self, _button):
-        self.positions = default_layout(self.sinks)
         self.source = (0.0, 0.0)
-
-        self.on_positions_changed(dict(self.positions))
         self.on_source_changed(self.source)
+
+        speakers = [sink for sink in self.sinks if sink not in self.headsets]
+        self.positions = default_layout(speakers)
+        for sink in self.headsets:
+            for emitter in emitters_for(sink, True):
+                self.positions[emitter] = default_emitter_position(emitter)
+
+        if self.positions:
+            self.on_positions_changed(dict(self.positions))
+
         self.canvas.queue_draw()

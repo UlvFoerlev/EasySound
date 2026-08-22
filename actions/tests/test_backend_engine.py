@@ -361,3 +361,112 @@ def test_missing_gain_entries_fall_back_to_unity(backend, tmp_path, fake_streams
 
     peaks = {s.sink: int(np.abs(as_samples(s)).max()) for s in fake_streams}
     assert peaks["b"] > 9000
+
+
+def test_a_delay_pads_the_stream_with_silence(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    frames = write_tone(path, seconds=0.1, value=9000)
+
+    backend.play(str(path), sinks=["late"], delays=[0.02])
+    assert wait_for_idle(backend)
+
+    played = as_samples(fake_streams[0])
+    pad = int(0.02 * RATE)
+    assert len(played) == pad + frames
+    assert int(np.abs(played[:pad]).max()) == 0      # silence first
+    assert int(np.abs(played[pad:]).max()) > 8000    # then the sound
+
+
+def test_each_sink_can_wait_a_different_amount(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    frames = write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["first", "second"], delays=[0.0, 0.01])
+    assert wait_for_idle(backend)
+
+    lengths = {s.sink: len(as_samples(s)) for s in fake_streams}
+    assert lengths["first"] == frames
+    assert lengths["second"] == frames + int(0.01 * RATE)
+
+
+def test_no_delay_means_no_padding(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    frames = write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"])
+    assert wait_for_idle(backend)
+    assert len(as_samples(fake_streams[0])) == frames
+
+
+def test_sink_kind_trusts_the_form_factor(backend_module):
+    assert backend_module.sink_kind({"device.form_factor": "headset"}) == "headset"
+    assert backend_module.sink_kind({"device.form_factor": "headphone"}) == "headset"
+    assert backend_module.sink_kind({"device.form_factor": "speaker"}) == "speaker"
+    assert backend_module.sink_kind({"device.form_factor": "internal"}) == "speaker"
+
+
+def test_sink_kind_falls_back_to_the_active_port(backend_module):
+    # An internal card exposes headphones as a port, not as its own sink
+    props = {"device.icon_name": "audio-card-analog-pci"}
+    assert backend_module.sink_kind(props, "analog-output-headphones") == "headset"
+    assert backend_module.sink_kind(props, "analog-output-speaker") == "speaker"
+
+
+def test_sink_kind_falls_back_to_the_icon(backend_module):
+    assert backend_module.sink_kind({"device.icon_name": "audio-headphones"}) == "headset"
+    assert backend_module.sink_kind({"device.icon_name": "audio-speakers"}) == "speaker"
+
+
+def test_sink_kind_defaults_to_speaker(backend_module):
+    # The analog card on this machine reports no form factor at all
+    assert backend_module.sink_kind({}) == "speaker"
+    assert backend_module.sink_kind({"device.form_factor": None}, "") == "speaker"
+
+
+def write_mono(path, seconds=0.1, value=9000):
+    frames = int(RATE * seconds)
+    sf.write(str(path), np.full((frames, 1), value, dtype=np.int16), RATE, subtype="PCM_16")
+    return frames
+
+
+def test_mono_is_upmixed_so_spatial_can_pan_it(backend, tmp_path, fake_streams):
+    path = tmp_path / "mono.wav"
+    frames = write_mono(path)
+
+    backend.play(str(path), sinks=["ears"], gains=[[1.0, 0.0]])
+    assert wait_for_idle(backend)
+
+    played = np.frombuffer(bytes(fake_streams[0].payload), dtype=np.int16).reshape(-1, 2)
+    assert len(played) == frames
+    assert int(np.abs(played[:, 0]).max()) > 8000   # left keeps the sound
+    assert int(np.abs(played[:, 1]).max()) == 0     # right is panned away
+
+
+def test_mono_stays_mono_without_spatial(backend, tmp_path, fake_streams):
+    path = tmp_path / "mono.wav"
+    frames = write_mono(path)
+
+    backend.play(str(path), sinks=["a"])
+    assert wait_for_idle(backend)
+
+    # No spatial gains, so nothing is upmixed and the stream stays single channel
+    played = np.frombuffer(bytes(fake_streams[0].payload), dtype=np.int16)
+    assert len(played) == frames
+
+
+def test_stereo_is_untouched_by_the_upmix_path(backend, tmp_path, fake_streams):
+    path = tmp_path / "stereo.wav"
+    frames = write_tone(path, seconds=0.1)
+
+    backend.play(str(path), sinks=["a"], gains=[[1.0, 1.0]])
+    assert wait_for_idle(backend)
+    assert len(as_samples(fake_streams[0])) == frames
+
+
+def test_bluetooth_detection(backend_module):
+    assert backend_module.is_bluetooth({"device.bus": "bluetooth"}) is True
+    assert backend_module.is_bluetooth({"device.bus": "Bluetooth"}) is True
+    assert backend_module.is_bluetooth({"device.bus": "pci"}) is False
+    # bluez names the sink after the adapter, which covers a missing bus property
+    assert backend_module.is_bluetooth({}, "bluez_output.AC_12_2F.1") is True
+    assert backend_module.is_bluetooth({}, "alsa_output.pci-0000") is False
