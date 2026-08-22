@@ -7,6 +7,7 @@ from pathlib import Path
 
 import globals as gl
 
+from .actions.legacy_action import action_id_in_pages
 from .actions.play_sound.play_sound import PlaySoundAction
 
 # Wiki
@@ -65,20 +66,13 @@ class PluginEasySound(PluginBase):
         self.add_action_holder(self.action_play_sound_legacy)
 
     def legacy_action_in_use(self) -> bool:
-        # Fails open on any error: a hidden holder breaks pages, a needlessly shown one is only cosmetic
+        # Fails open when the page list is unavailable, for the same reason action_id_in_pages does
         try:
             page_paths = gl.page_manager.get_pages()
         except Exception:
             return True
 
-        for page_path in page_paths:
-            try:
-                if LEGACY_PLAY_SOUND_ACTION_ID in Path(page_path).read_text():
-                    return True
-            except OSError:
-                return True
-
-        return False
+        return action_id_in_pages(LEGACY_PLAY_SOUND_ACTION_ID, page_paths)
 
     def setup_backend(self):
         # Launch backend
