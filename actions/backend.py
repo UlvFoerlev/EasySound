@@ -15,6 +15,23 @@ MAX_CONCURRENT_STREAMS = 32
 SAMPLE_FORMAT = pasimple.PA_SAMPLE_S16LE
 
 
+def channel_weights(channel_gain: list[float] | None, channels: int):
+    """Spreads a left/right spatial gain across a sound's actual channel count."""
+    if not channel_gain:
+        return np.ones(channels, dtype=np.float32)
+
+    values = np.asarray(channel_gain, dtype=np.float32)
+
+    if len(values) == channels:
+        return values
+
+    # A mono sound has no sides to pan, so the pair collapses into one gain
+    if channels == 1:
+        return np.array([values.mean()], dtype=np.float32)
+
+    return np.resize(values, channels).astype(np.float32)
+
+
 def file_stamp(path: str) -> tuple[float, int] | None:
     try:
         stat = os.stat(path)
@@ -119,6 +136,7 @@ class Backend(BackendBase):
         loops: int = 0,
         fade_in: float = 0.0,
         fade_out: float = 0.0,
+        gains: list[list[float]] | None = None,
     ) -> str | None:
         key = path if isinstance(path, str) else str(path)
 
@@ -131,11 +149,13 @@ class Backend(BackendBase):
         if not targets:
             return None
 
+        # Spatial gains arrive parallel to targets, so a stream that fails to open drops its entry too
         opened = []
-        for sink in targets:
+        for index, sink in enumerate(targets):
             stream = self._open_stream(sink=sink, rate=rate, channels=channels)
             if stream is not None:
-                opened.append(stream)
+                channel_gain = gains[index] if gains and index < len(gains) else None
+                opened.append((stream, channel_weights(channel_gain, channels)))
 
         # A partial fan-out still counts as playing: one dead speaker must not fail the whole group
         if not opened:
@@ -150,10 +170,10 @@ class Backend(BackendBase):
             self.playbacks[handle] = playback
             playback.writers = len(opened)
 
-        for stream in opened:
+        for stream, weights in opened:
             Thread(
                 target=self._pump,
-                args=(handle, playback, stream, key, gain, loops, fade_in, fade_out),
+                args=(handle, playback, stream, weights, key, gain, loops, fade_in, fade_out),
                 daemon=True,
             ).start()
 
@@ -192,6 +212,7 @@ class Backend(BackendBase):
         handle: str,
         playback: Playback,
         stream,
+        weights,
         key: str,
         gain: float,
         loops: int,
@@ -239,7 +260,8 @@ class Backend(BackendBase):
                     envelope *= np.clip(1.0 - (frames - stop_at) / stop_frames, 0.0, 1.0)
 
                 chunk = samples[position : position + count].astype(np.float32)
-                stream.write((chunk * (gain * envelope)[:, None]).astype(np.int16).tobytes())
+                shaped = chunk * (gain * envelope)[:, None] * weights
+                stream.write(shaped.astype(np.int16).tobytes())
 
                 position += count
                 played += count

@@ -25,18 +25,17 @@ from .actions.play_sound.play_sound import PlaySoundAction
 LEGACY_PLAY_SOUND_ACTION_ID = "dev_core477_EasySound::PlaySound"
 
 LOGO_PATH = Path(__file__).parent / "assets" / "logo.png"
-LOGO_HEIGHT = 32
+LOGO_SOURCE_HEIGHT = 64
 
 
-def logo_image(height: int = LOGO_HEIGHT) -> Gtk.Image:
+def logo_image() -> Gtk.Image:
     """A fresh logo widget; each holder needs its own, since the chooser reparents the one it is given."""
-    # Loaded at twice the height so it stays sharp on HiDPI, then requested at its true aspect ratio,
-    # because Gtk.Image otherwise measures as a square 16x16 icon box whatever the file contains
-    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(LOGO_PATH), -1, height * 2, True)
-    image = Gtk.Image.new_from_pixbuf(pixbuf)
-    image.set_size_request(round(pixbuf.get_width() / 2), height)
+    # No size request on purpose: every other plugin's prefix measures 16x16, and a wider one indents
+    # both the icon and the title out of line with the rest of the list. The source is loaded larger
+    # than the icon box so it stays sharp when GTK scales it down.
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(LOGO_PATH), -1, LOGO_SOURCE_HEIGHT, True)
 
-    return image
+    return Gtk.Image.new_from_pixbuf(pixbuf)
 
 
 class PluginEasySound(PluginBase):

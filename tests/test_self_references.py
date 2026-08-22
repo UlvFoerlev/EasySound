@@ -8,6 +8,7 @@ from conftest import REPO_ROOT
 MODULES = [
     REPO_ROOT / "actions" / "play_sound" / "play_sound.py",
     REPO_ROOT / "actions" / "group_dialog.py",
+    REPO_ROOT / "actions" / "spatial_dialog.py",
     REPO_ROOT / "main.py",
 ]
 
@@ -15,6 +16,7 @@ MODULES = [
 INHERITED = {
     # ActionCore / SoundActionBase / PluginBase
     "_get_property",
+    "_set_property",
     "add_action_holder",
     "add_event_assigner",
     "generative_ui_objects",

@@ -1,4 +1,4 @@
-from gi.repository import GLib
+from gi.repository import Adw, GLib, Gtk
 from GtkHelper.ComboRow import SimpleComboRowItem
 from GtkHelper.FileDialogRow import FileDialogFilter
 from GtkHelper.GenerativeUI.ComboRow import ComboRow
@@ -6,6 +6,7 @@ from GtkHelper.GenerativeUI.EntryRow import EntryRow
 from GtkHelper.GenerativeUI.ExpanderRow import ExpanderRow
 from GtkHelper.GenerativeUI.ScaleRow import ScaleRow
 from GtkHelper.GenerativeUI.SpinRow import SpinRow
+from GtkHelper.GenerativeUI.SwitchRow import SwitchRow
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.EventAssigner import EventAssigner
 
@@ -25,6 +26,8 @@ from ..compat import FileDialogRow
 from ..group_dialog import SpeakerGroupDialog
 from ..modes import MODE_LOCALES, Mode
 from ..sound_action_base import SoundActionBase
+from ..spatial import channel_gains, clamp_position, normalize_positions, stereo_balance
+from ..spatial_dialog import SpatialDialog
 
 # Glob patterns, not MIME types: FileDialogFilter takes patterns
 AUDIO_FILE_PATTERNS = ["*.mp3", "*.wav", "*.ogg", "*.oga", "*.opus", "*.flac"]
@@ -84,6 +87,14 @@ class PlaySoundAction(SoundActionBase):
     @property
     def speakers(self) -> str:
         return self._get_property(key="speakers", default=DEFAULT, enforce_type=str)
+
+    @property
+    def spatial_enabled(self) -> bool:
+        return self._get_property(key="spatial_enabled", default=False, enforce_type=bool)
+
+    @property
+    def spatial_source(self) -> tuple[float, float]:
+        return clamp_position(self._get_property(key="spatial_source", default=[0.0, 0.0]))
 
     @property
     def volume(self) -> float:
@@ -220,6 +231,28 @@ class PlaySoundAction(SoundActionBase):
         )
         self.advanced_section.add_row(self.speakers_row.widget)
 
+        self.spatial_row = SwitchRow(
+            action_core=self,
+            var_name="spatial_enabled",
+            default_value=False,
+            title="action.play-sound.spatial",
+            subtitle="action.play-sound.spatial.subtitle",
+            auto_add=False,
+        )
+        self.advanced_section.add_row(self.spatial_row.widget)
+
+        # A plain row, not a generative one: it stores nothing and only opens the map
+        self.spatial_button_row = Adw.ActionRow(
+            title=self.plugin_base.lm.get("action.play-sound.spatial.position")
+        )
+        spatial_button = Gtk.Button(
+            label=self.plugin_base.lm.get("action.play-sound.spatial.configure"),
+            valign=Gtk.Align.CENTER,
+        )
+        spatial_button.connect("clicked", self.on_spatial_clicked)
+        self.spatial_button_row.add_suffix(spatial_button)
+        self.advanced_section.add_row(self.spatial_button_row)
+
         # The framework adds every auto_add row itself, so returning them here would double-parent them
         return []
 
@@ -274,6 +307,47 @@ class PlaySoundAction(SoundActionBase):
             update_settings=False,
             trigger_callback=False,
         )
+
+    def speaker_positions(self) -> dict:
+        return normalize_positions(self.plugin_base.get_settings().get("speaker_positions"))
+
+    def save_speaker_positions(self, positions: dict) -> None:
+        # Where a speaker physically stands belongs to the plugin, not to one action
+        settings = self.plugin_base.get_settings()
+        settings["speaker_positions"] = {sink: list(point) for sink, point in positions.items()}
+        self.plugin_base.set_settings(settings)
+
+    def save_spatial_source(self, source) -> None:
+        self._set_property(key="spatial_source", value=list(clamp_position(source)))
+
+    def spatial_gains(self, sinks: list[str] | None) -> list[list[float]] | None:
+        if not self.spatial_enabled:
+            return None
+
+        source = self.spatial_source
+
+        # The default output has no known position, so only left/right balance can apply to it
+        if sinks is None:
+            return [list(stereo_balance(source[0]))]
+
+        per_sink = channel_gains(source, sinks, self.speaker_positions())
+        return [list(per_sink.get(sink, (1.0, 1.0))) for sink in sinks]
+
+    def on_spatial_clicked(self, _button):
+        sinks = self.resolve_sinks() or []
+        labels = {sink["name"]: sink["label"] for sink in self.list_sinks()}
+
+        # Held so the dialog outlives this call
+        self.spatial_dialog = SpatialDialog(
+            plugin=self.plugin_base,
+            sinks=sinks,
+            labels=labels,
+            positions=self.speaker_positions(),
+            source=self.spatial_source,
+            on_positions_changed=self.save_speaker_positions,
+            on_source_changed=self.save_spatial_source,
+        )
+        self.spatial_dialog.present(self.spatial_button_row)
 
     def resolve_sinks(self) -> list[str] | None:
         target = self.speakers
@@ -359,10 +433,12 @@ class PlaySoundAction(SoundActionBase):
 
         if backend is not None:
             try:
+                sinks = self.resolve_sinks()
                 handle = backend.play(
                     path=self.filepath,
-                    sinks=self.resolve_sinks(),
+                    sinks=sinks,
                     volume=self.volume,
+                    gains=self.spatial_gains(sinks),
                     **kwargs,
                 )
             except Exception:

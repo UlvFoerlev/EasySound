@@ -308,3 +308,56 @@ def test_an_empty_sink_query_is_not_cached(backend, monkeypatch):
     backend.list_sinks()
     backend.list_sinks()
     assert len(calls) == 2
+
+
+def test_channel_weights_defaults_to_unity(backend_module):
+    weights = backend_module.channel_weights(None, 2)
+    assert list(weights) == [1.0, 1.0]
+
+
+def test_channel_weights_passes_a_matching_pair(backend_module):
+    assert list(backend_module.channel_weights([1.0, 0.25], 2)) == [1.0, 0.25]
+
+
+def test_channel_weights_collapses_for_mono(backend_module):
+    # A mono file has no sides, so panning must not silence it
+    assert list(backend_module.channel_weights([1.0, 0.0], 1)) == [0.5]
+
+
+def test_channel_weights_repeats_across_more_channels(backend_module):
+    assert list(backend_module.channel_weights([1.0, 0.5], 4)) == [1.0, 0.5, 1.0, 0.5]
+
+
+def test_spatial_gains_are_applied_per_channel(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.1, value=10000)
+
+    backend.play(str(path), sinks=["sink-a"], gains=[[1.0, 0.0]])
+    assert wait_for_idle(backend)
+
+    played = as_samples(fake_streams[0])
+    assert int(np.abs(played[:, 0]).max()) > 9000   # left kept
+    assert int(np.abs(played[:, 1]).max()) == 0     # right muted
+
+
+def test_each_sink_gets_its_own_gain(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.1, value=10000)
+
+    backend.play(str(path), sinks=["near", "far"], gains=[[1.0, 1.0], [0.25, 0.25]])
+    assert wait_for_idle(backend)
+
+    peaks = {s.sink: int(np.abs(as_samples(s)).max()) for s in fake_streams}
+    assert peaks["near"] > 9000
+    assert 2000 < peaks["far"] < 3000
+
+
+def test_missing_gain_entries_fall_back_to_unity(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.1, value=10000)
+
+    backend.play(str(path), sinks=["a", "b"], gains=[[0.5, 0.5]])
+    assert wait_for_idle(backend)
+
+    peaks = {s.sink: int(np.abs(as_samples(s)).max()) for s in fake_streams}
+    assert peaks["b"] > 9000
