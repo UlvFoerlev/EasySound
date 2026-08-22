@@ -1,45 +1,24 @@
 name: Tests
-
-# No paths filters: a required check that gets skipped never reports, which blocks the PR forever
 on:
   pull_request:
+    types: [opened, synchronize]
   push:
     branches: [main]
 
-permissions:
-  contents: read
-
-concurrency:
-  group: tests-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  pytest:
+  Test:
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12"]
-
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v10
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          version: "latest"
+          python-version: "3.12"
 
-      # --no-project keeps uv off .venv, the path __install__.py uses for the plugin's backend venv
-      - name: Run tests
-        run: uv run --no-project --python ${{ matrix.python-version }} --with pytest pytest
-
-  # Single stable check name to require in branch protection, so the matrix can change freely
-  tests-pass:
-    if: always()
-    needs: pytest
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Fail if any test job failed
-        if: needs.pytest.result != 'success'
-        run: exit 1
+      # No uv sync: there are no project deps, and it would claim .venv, which __install__.py owns
+      - name: Pytest
+        run: uv run --no-project --with pytest pytest
