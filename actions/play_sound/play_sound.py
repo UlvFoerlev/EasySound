@@ -100,7 +100,6 @@ class PlaySoundAction(SoundActionBase):
             default_value="",
             title="action.play-sound.sound_file",
             dialog_title="action.play-sound.select_file",
-            only_show_filename=False,
             filters=[
                 FileDialogFilter(
                     name=self.plugin_base.lm.get("action.play-sound.audio_files"),
