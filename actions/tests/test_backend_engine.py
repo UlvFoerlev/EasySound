@@ -1,0 +1,310 @@
+import importlib.util
+import sys
+import time
+import types
+
+import pytest
+
+from conftest import REPO_ROOT
+
+# pulsectl loads libpulse at import time, which is not an ImportError, so any failure skips
+try:
+    import numpy  # noqa: F401
+    import pasimple  # noqa: F401
+    import pulsectl  # noqa: F401
+    import soundfile  # noqa: F401
+except Exception as exc:  # pragma: no cover
+    pytest.skip(f"audio engine deps unavailable: {exc}", allow_module_level=True)
+
+import numpy as np
+import soundfile as sf
+
+RATE = 8000
+CHANNELS = 2
+
+
+@pytest.fixture(scope="module")
+def backend_module():
+    # BackendBase would try to connect back over rpyc, so it is stubbed to load the module in isolation
+    stub = types.ModuleType("streamcontroller_plugin_tools")
+
+    class BackendBase:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    stub.BackendBase = BackendBase
+    saved = sys.modules.get("streamcontroller_plugin_tools")
+    sys.modules["streamcontroller_plugin_tools"] = stub
+
+    spec = importlib.util.spec_from_file_location(
+        "easysound_backend_under_test", REPO_ROOT / "actions" / "backend.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    yield module
+
+    if saved is None:
+        sys.modules.pop("streamcontroller_plugin_tools", None)
+    else:
+        sys.modules["streamcontroller_plugin_tools"] = saved
+
+
+@pytest.fixture
+def backend(backend_module):
+    return backend_module.Backend()
+
+
+class FakeStream:
+    def __init__(self):
+        self.payload = bytearray()
+        self.closed = False
+
+    def write(self, data):
+        self.payload += data
+
+    def drain(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def fake_streams(backend, monkeypatch):
+    created = []
+
+    def _open(sink, rate, channels):
+        stream = FakeStream()
+        stream.sink = sink
+        created.append(stream)
+        return stream
+
+    monkeypatch.setattr(backend, "_open_stream", _open)
+    return created
+
+
+def write_tone(path, seconds=0.25, value=8000):
+    frames = int(RATE * seconds)
+    samples = np.full((frames, CHANNELS), value, dtype=np.int16)
+    sf.write(str(path), samples, RATE, subtype="PCM_16")
+    return frames
+
+
+def as_samples(stream):
+    return np.frombuffer(bytes(stream.payload), dtype=np.int16).reshape(-1, CHANNELS)
+
+
+def wait_for_idle(backend, timeout=10.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not backend.playbacks:
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def test_preload_caches_and_reports_success(backend, tmp_path):
+    path = tmp_path / "tone.wav"
+    write_tone(path)
+
+    assert backend.preload_sound(str(path)) is True
+    assert str(path) in backend.cache
+
+
+def test_preload_rejects_a_non_audio_file(backend, tmp_path):
+    path = tmp_path / "junk.wav"
+    path.write_text("not audio")
+
+    assert backend.preload_sound(str(path)) is False
+    assert str(path) not in backend.cache
+
+
+def test_preload_reuses_the_cache(backend, tmp_path):
+    path = tmp_path / "tone.wav"
+    write_tone(path)
+    backend.preload_sound(str(path))
+    first = backend.cache[str(path)][0]
+
+    backend.preload_sound(str(path))
+    assert backend.cache[str(path)][0] is first
+
+
+def test_preload_redecodes_a_changed_file(backend, tmp_path):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.1)
+    backend.preload_sound(str(path))
+    first = backend.cache[str(path)][0]
+
+    write_tone(path, seconds=0.2)
+    backend.cache_stamps[str(path)] = (0.0, 0)  # stand in for a differing mtime/size
+    backend.preload_sound(str(path))
+
+    assert backend.cache[str(path)][0] is not first
+
+
+def test_play_returns_none_for_an_unloadable_file(backend, tmp_path):
+    assert backend.play(str(tmp_path / "missing.wav")) is None
+
+
+def test_play_returns_none_when_no_sink_resolves(backend, tmp_path):
+    path = tmp_path / "tone.wav"
+    write_tone(path)
+
+    # An empty target list means every member was absent, which must not silently play on the default
+    assert backend.play(str(path), sinks=[]) is None
+
+
+def test_one_shot_writes_the_whole_sound_once(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    frames = write_tone(path, seconds=0.2)
+
+    handle = backend.play(str(path), sinks=["sink-a"])
+    assert handle is not None
+    assert wait_for_idle(backend)
+
+    assert len(fake_streams) == 1
+    assert len(as_samples(fake_streams[0])) == frames
+    assert fake_streams[0].closed is True
+
+
+def test_a_group_fans_out_one_stream_per_sink(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    frames = write_tone(path, seconds=0.1)
+
+    backend.play(str(path), sinks=["sink-a", "sink-b", "sink-c"])
+    assert wait_for_idle(backend)
+
+    assert sorted(s.sink for s in fake_streams) == ["sink-a", "sink-b", "sink-c"]
+    for stream in fake_streams:
+        assert len(as_samples(stream)) == frames
+
+
+def test_a_failing_sink_does_not_stop_the_others(backend, tmp_path, monkeypatch):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.1)
+    good = FakeStream()
+
+    def _open(sink, rate, channels):
+        return None if sink == "broken" else good
+
+    monkeypatch.setattr(backend, "_open_stream", _open)
+
+    assert backend.play(str(path), sinks=["broken", "works"]) is not None
+    assert wait_for_idle(backend)
+    assert len(good.payload) > 0
+
+
+def test_volume_scales_the_samples(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.1, value=10000)
+
+    backend.play(str(path), sinks=["sink-a"], volume=50.0)
+    assert wait_for_idle(backend)
+
+    peak = int(np.abs(as_samples(fake_streams[0])).max())
+    assert 4500 <= peak <= 5500
+
+
+def test_fade_in_ramps_from_silence(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.4, value=10000)
+
+    backend.play(str(path), sinks=["sink-a"], fade_in=0.4)
+    assert wait_for_idle(backend)
+
+    played = as_samples(fake_streams[0])
+    assert abs(int(played[0][0])) < 500
+    assert int(played[len(played) // 2][0]) > 3000
+    assert int(played[-1][0]) > 8000
+
+
+def test_one_shot_fade_out_ends_in_silence(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.4, value=10000)
+
+    backend.play(str(path), sinks=["sink-a"], fade_out=0.2)
+    assert wait_for_idle(backend)
+
+    played = as_samples(fake_streams[0])
+    assert int(played[0][0]) > 9000
+    assert abs(int(played[-1][0])) < 500
+
+
+def test_looping_repeats_until_stopped(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    frames = write_tone(path, seconds=0.05)
+
+    handle = backend.play(str(path), sinks=["sink-a"], loops=-1)
+    time.sleep(0.3)
+    assert backend.playbacks, "an endless loop should still be running"
+
+    backend.stop(handle)
+    assert wait_for_idle(backend)
+    assert len(as_samples(fake_streams[0])) > frames
+
+
+def test_stop_with_fade_out_keeps_playing_briefly(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05, value=10000)
+
+    handle = backend.play(str(path), sinks=["sink-a"], loops=-1)
+    backend.stop(handle, fade_out=0.2)
+    assert wait_for_idle(backend)
+
+    played = as_samples(fake_streams[0])
+    assert abs(int(played[-1][0])) < 1500
+
+
+def test_stopping_an_unknown_handle_is_harmless(backend):
+    backend.stop("playback-does-not-exist")
+
+
+def test_stream_slots_are_released(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    for _ in range(5):
+        backend.play(str(path), sinks=["sink-a", "sink-b"])
+        assert wait_for_idle(backend)
+
+    # Leaked slots would eventually make _open_stream refuse to start anything
+    assert backend.stream_slots.acquire(blocking=False) is True
+    backend.stream_slots.release()
+
+
+def test_sink_list_is_cached_briefly(backend, monkeypatch):
+    calls = []
+
+    def _query():
+        calls.append(1)
+        return [{"name": "sink-a", "label": "Sink A", "is_default": True}]
+
+    monkeypatch.setattr(backend, "_query_sinks", _query)
+
+    assert backend.list_sinks()[0]["name"] == "sink-a"
+    backend.list_sinks()
+    backend.list_sinks()
+    assert len(calls) == 1
+
+
+def test_sink_cache_expires(backend, backend_module, monkeypatch):
+    monkeypatch.setattr(backend, "_query_sinks", lambda: [{"name": "s", "label": "S", "is_default": True}])
+    backend.list_sinks()
+
+    backend.sink_cache_time -= backend_module.SINK_CACHE_SECONDS + 1
+    calls = []
+    monkeypatch.setattr(backend, "_query_sinks", lambda: calls.append(1) or [])
+    backend.list_sinks()
+
+    assert len(calls) == 1
+
+
+def test_an_empty_sink_query_is_not_cached(backend, monkeypatch):
+    calls = []
+    monkeypatch.setattr(backend, "_query_sinks", lambda: calls.append(1) or [])
+
+    # Caching an empty result would hide speakers until the TTL expired
+    backend.list_sinks()
+    backend.list_sinks()
+    assert len(calls) == 2

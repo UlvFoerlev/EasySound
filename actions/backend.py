@@ -1,15 +1,18 @@
 from streamcontroller_plugin_tools import BackendBase
 from pathlib import Path
-from threading import Thread, Timer
+from threading import Lock, Semaphore, Thread
+import os
+import time
 
-try:
-    import os
+import numpy as np
+import pasimple
+import pulsectl
+import soundfile as sf
 
-    os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
-    import pygame as pg
-    from pygame.mixer import Sound, Channel
-except ImportError as e:
-    raise e
+CHUNK_FRAMES = 1024
+SINK_CACHE_SECONDS = 2.0
+MAX_CONCURRENT_STREAMS = 32
+SAMPLE_FORMAT = pasimple.PA_SAMPLE_S16LE
 
 
 def file_stamp(path: str) -> tuple[float, int] | None:
@@ -21,31 +24,86 @@ def file_stamp(path: str) -> tuple[float, int] | None:
     return stat.st_mtime, stat.st_size
 
 
+class Playback:
+    """One logical sound, fanned out over one stream per target sink."""
+
+    def __init__(self):
+        self.stopping = False
+        self.stop_fade_out = 0.0
+        self.writers = 0
+
+
 class Backend(BackendBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        pg.mixer.init()
-        pg.mixer.set_num_channels(32)
-
-        self.cached_sounds: dict[str, Sound] = {}
+        self.cache: dict[str, tuple[np.ndarray, int, int]] = {}
         self.cache_stamps: dict[str, tuple[float, int] | None] = {}
+        self.playbacks: dict[str, Playback] = {}
+        self.lock = Lock()
+        self.handle_counter = 0
+        # Daemon threads rather than a ThreadPoolExecutor, so an endless loop cannot block process exit
+        self.stream_slots = Semaphore(MAX_CONCURRENT_STREAMS)
+        self.sink_cache: list[dict] = []
+        self.sink_cache_time = 0.0
+
+    def list_sinks(self) -> list[dict]:
+        # Briefly cached so a group or single-sink press does not pay a pulse round trip every time
+        now = time.monotonic()
+        if self.sink_cache and now - self.sink_cache_time < SINK_CACHE_SECONDS:
+            return self.sink_cache
+
+        sinks = self._query_sinks()
+        if sinks:
+            self.sink_cache = sinks
+            self.sink_cache_time = now
+
+        return sinks
+
+    def _query_sinks(self) -> list[dict]:
+        # sink.name is the identity: it is what pasimple's device_name expects
+        try:
+            with pulsectl.Pulse("easysound-sinks") as pulse:
+                default_name = pulse.server_info().default_sink_name
+                sinks = []
+
+                for sink in pulse.sink_list():
+                    props = sink.proplist
+                    label = (
+                        props.get("device.product.name")
+                        or props.get("device.nick")
+                        or props.get("device.description")
+                        or sink.description
+                        or sink.name
+                    )
+                    sinks.append(
+                        {
+                            "name": sink.name,
+                            "label": label,
+                            "is_default": sink.name == default_name,
+                        }
+                    )
+
+                return sinks
+        except Exception:
+            return []
 
     def preload_sound(self, path: str | Path, force: bool = False) -> bool:
         key = path if isinstance(path, str) else str(path)
         stamp = file_stamp(key)
 
         # A cached sound is reused unless the file changed on disk, so a press never waits on decoding
-        if not force and key in self.cached_sounds and self.cache_stamps.get(key) == stamp:
+        if not force and key in self.cache and self.cache_stamps.get(key) == stamp:
             return True
 
         try:
-            self.cached_sounds[key] = pg.mixer.Sound(key)
-        except (pg.error, OSError, TypeError, ValueError):
-            self.cached_sounds.pop(key, None)
+            samples, rate = sf.read(key, dtype="int16", always_2d=True)
+        except Exception:
+            self.cache.pop(key, None)
             self.cache_stamps.pop(key, None)
             return False
 
+        self.cache[key] = (samples, int(rate), samples.shape[1])
         self.cache_stamps[key] = stamp
         return True
 
@@ -53,44 +111,160 @@ class Backend(BackendBase):
         # Fire-and-forget so page loads and key presses never block on the first decode
         Thread(target=self.preload_sound, args=(path,), daemon=True).start()
 
-    def play_sound(
+    def play(
         self,
         path: str | Path,
+        sinks: list[str] | None = None,
         volume: float = 100.0,
         loops: int = 0,
         fade_in: float = 0.0,
         fade_out: float = 0.0,
-    ) -> tuple[Sound | None, Channel | None]:
+    ) -> str | None:
         key = path if isinstance(path, str) else str(path)
 
-        if not self.preload_sound(path=path):
-            return None, None
+        if not self.preload_sound(path=key):
+            return None
 
-        sound = self.cached_sounds[key]
+        _, rate, channels = self.cache[key]
+        # None means "whatever the server considers default", which is one stream, not zero
+        targets = [None] if sinks is None else list(sinks)
+        if not targets:
+            return None
 
-        channel = pg.mixer.find_channel()
-        if channel is None:
-            return None, None
+        opened = []
+        for sink in targets:
+            stream = self._open_stream(sink=sink, rate=rate, channels=channels)
+            if stream is not None:
+                opened.append(stream)
 
-        # Volume is set per channel; Sound.set_volume would hit every action sharing the file
-        channel.set_volume(max(min((volume / 100.0), 1.0), 0.0))
-        channel.play(sound, loops=loops, fade_ms=int(fade_in * 1000))
+        # A partial fan-out still counts as playing: one dead speaker must not fail the whole group
+        if not opened:
+            return None
 
-        if fade_out and loops == 0:
-            self.schedule_fade_out(channel=channel, sound=sound, fade_out=fade_out)
+        gain = max(min(volume / 100.0, 1.0), 0.0)
+        playback = Playback()
 
-        return sound, channel
+        with self.lock:
+            self.handle_counter += 1
+            handle = f"playback-{self.handle_counter}"
+            self.playbacks[handle] = playback
+            playback.writers = len(opened)
 
-    def schedule_fade_out(self, channel: Channel, sound: Sound, fade_out: float) -> None:
-        delay = max(sound.get_length() - fade_out, 0.0)
+        for stream in opened:
+            Thread(
+                target=self._pump,
+                args=(handle, playback, stream, key, gain, loops, fade_in, fade_out),
+                daemon=True,
+            ).start()
 
-        timer = Timer(delay, self.fade_out_channel, args=(channel, sound, fade_out))
-        timer.daemon = True
-        timer.start()
+        return handle
 
-    def fade_out_channel(self, channel: Channel, sound: Sound, fade_out: float) -> None:
-        if channel.get_sound() == sound:  # the channel may have been recycled by now
-            channel.fadeout(int(fade_out * 1000))
+    def stop(self, handle: str, fade_out: float = 0.0) -> None:
+        with self.lock:
+            playback = self.playbacks.get(handle)
+
+        if playback is None:
+            return
+
+        playback.stop_fade_out = max(fade_out, 0.0)
+        playback.stopping = True
+
+    def _open_stream(self, sink: str | None, rate: int, channels: int):
+        if not self.stream_slots.acquire(blocking=False):
+            return None
+
+        try:
+            return pasimple.PaSimple(
+                pasimple.PA_STREAM_PLAYBACK,
+                SAMPLE_FORMAT,
+                channels,
+                rate,
+                app_name="EasySound",
+                stream_name="EasySound",
+                device_name=sink,
+            )
+        except Exception:
+            self.stream_slots.release()
+            return None
+
+    def _pump(
+        self,
+        handle: str,
+        playback: Playback,
+        stream,
+        key: str,
+        gain: float,
+        loops: int,
+        fade_in: float,
+        fade_out: float,
+    ) -> None:
+        try:
+            samples, rate, _ = self.cache[key]
+            total = len(samples)
+            fade_in_frames = int(fade_in * rate)
+            fade_out_frames = int(fade_out * rate)
+
+            position = 0
+            played = 0
+            remaining_loops = loops
+            stop_at = None
+
+            while total:
+                if playback.stopping and stop_at is None:
+                    stop_at = played
+                    stop_frames = int(playback.stop_fade_out * rate)
+                    if stop_frames <= 0:
+                        break
+
+                if position >= total:
+                    if remaining_loops == 0:
+                        break
+                    if remaining_loops > 0:
+                        remaining_loops -= 1
+                    position = 0
+
+                count = min(CHUNK_FRAMES, total - position)
+                frames = np.arange(played, played + count, dtype=np.float32)
+                envelope = np.ones(count, dtype=np.float32)
+
+                if fade_in_frames > 0:
+                    envelope *= np.clip(frames / fade_in_frames, 0.0, 1.0)
+
+                # A looping sound has no natural end, so its fade-out only happens on stop
+                if fade_out_frames > 0 and loops == 0:
+                    envelope *= np.clip((total - frames) / fade_out_frames, 0.0, 1.0)
+
+                if stop_at is not None:
+                    stop_frames = max(int(playback.stop_fade_out * rate), 1)
+                    envelope *= np.clip(1.0 - (frames - stop_at) / stop_frames, 0.0, 1.0)
+
+                chunk = samples[position : position + count].astype(np.float32)
+                stream.write((chunk * (gain * envelope)[:, None]).astype(np.int16).tobytes())
+
+                position += count
+                played += count
+
+                if stop_at is not None and played - stop_at >= max(int(playback.stop_fade_out * rate), 1):
+                    break
+
+            try:
+                stream.drain()
+            except Exception:
+                pass
+        except Exception:
+            pass
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+            self.stream_slots.release()
+
+            with self.lock:
+                playback.writers -= 1
+                if playback.writers <= 0:
+                    self.playbacks.pop(handle, None)
 
 
 backend = Backend()

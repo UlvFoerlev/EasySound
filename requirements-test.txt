@@ -1,0 +1,5 @@
+# Test-only deps; the plugin's runtime deps live in assets/requirements.txt
+pytest
+soundfile
+pasimple
+pulsectl
