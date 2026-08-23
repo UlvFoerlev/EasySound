@@ -41,6 +41,8 @@
     "action.play-sound.select_mode.till_turned_off": "Play until Turned Off",
     "action.play-sound.keep-playing": "Keep playing on other pages",
     "action.play-sound.keep-playing.subtitle": "Off: the sound stops when you leave this page. On: it plays until turned off, wherever you are.",
+    "action.play-sound.pause-mode": "Pause instead of stopping",
+    "action.play-sound.pause-mode.subtitle": "The key pauses and resumes, keeping its place, instead of stopping and starting over.",
     "action.play-sound.speakers": "Speakers",
     "action.play-sound.speakers.default": "Default",
     "action.play-sound.speakers.all": "All",

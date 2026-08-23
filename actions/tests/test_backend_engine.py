@@ -620,3 +620,102 @@ def test_a_stopping_loop_no_longer_counts_as_playing(backend, tmp_path, fake_str
 def test_unknown_tags_are_harmless(backend):
     assert backend.stop_tag("nothing-here") == 0
     assert backend.is_playing("nothing-here") is False
+
+
+def wait_until(predicate, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def test_playback_state_reports_the_three_states(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    assert backend.playback_state("bed") == "stopped"
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="bed")
+    assert backend.playback_state("bed") == "playing"
+
+    backend.pause_tag("bed")
+    assert wait_until(lambda: backend.playback_state("bed") == "paused")
+
+    backend.pause_tag("bed", False)
+    assert backend.playback_state("bed") == "playing"
+
+    backend.stop_tag("bed")
+    assert wait_for_idle(backend)
+    assert backend.playback_state("bed") == "stopped"
+
+
+def test_pausing_stops_the_writer_and_resuming_continues(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="bed")
+    stream = fake_streams[0]
+
+    assert wait_until(lambda: len(stream.payload) > 0)
+    backend.pause_tag("bed")
+    time.sleep(0.15)
+    frozen = len(stream.payload)
+
+    # Nothing more is written while paused
+    time.sleep(0.15)
+    assert len(stream.payload) == frozen
+
+    backend.pause_tag("bed", False)
+    assert wait_until(lambda: len(stream.payload) > frozen)
+
+    backend.stop_tag("bed")
+    assert wait_for_idle(backend)
+
+
+def test_a_paused_playback_can_still_be_stopped(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="bed")
+    backend.pause_tag("bed")
+    assert wait_until(lambda: backend.playback_state("bed") == "paused")
+
+    # A paused writer must notice the stop, or the thread and its stream slot leak
+    backend.stop_tag("bed")
+    assert wait_for_idle(backend)
+
+
+def test_stop_all_releases_paused_playbacks(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="one")
+    backend.play(str(path), sinks=["b"], loops=-1, tag="two")
+    backend.pause_tag("one")
+    assert wait_until(lambda: backend.playback_state("one") == "paused")
+
+    backend.stop_all()
+    assert wait_for_idle(backend)
+
+
+def test_pausing_one_tag_leaves_another_playing(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="rain")
+    backend.play(str(path), sinks=["b"], loops=-1, tag="klaxon")
+
+    assert backend.pause_tag("rain") == 1
+    assert wait_until(lambda: backend.playback_state("rain") == "paused")
+    assert backend.playback_state("klaxon") == "playing"
+
+    backend.stop_all()
+    assert wait_for_idle(backend)
+
+
+def test_pausing_an_unknown_tag_is_harmless(backend):
+    assert backend.pause_tag("nothing") == 0
+    assert backend.playback_state("nothing") == "stopped"
+    assert backend.pause_tag("") == 0

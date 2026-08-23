@@ -144,6 +144,12 @@ class PlaySoundAction(SoundActionBase):
         )
 
     @property
+    def pause_instead_of_stop(self) -> bool:
+        return self._get_property(
+            key="pause_instead_of_stop", default=False, enforce_type=bool
+        )
+
+    @property
     def spatial_enabled(self) -> bool:
         return self._get_property(key="spatial_enabled", default=False, enforce_type=bool)
 
@@ -225,7 +231,15 @@ class PlaySoundAction(SoundActionBase):
             title="action.play-sound.keep-playing",
             subtitle="action.play-sound.keep-playing.subtitle",
         )
-        self.update_keep_playing_visibility()
+
+        self.pause_row = SwitchRow(
+            action_core=self,
+            var_name="pause_instead_of_stop",
+            default_value=False,
+            title="action.play-sound.pause-mode",
+            subtitle="action.play-sound.pause-mode.subtitle",
+        )
+        self.update_loop_option_visibility()
 
         self.volume_row = ScaleRow(
             action_core=self,
@@ -727,15 +741,25 @@ class PlaySoundAction(SoundActionBase):
 
         return f"{page}|{ident}|{self.state}|{self.action_id}"
 
-    def loop_is_playing(self) -> bool:
+    def loop_state(self) -> str:
         backend = getattr(self.plugin_base, "backend", None)
         if backend is None:
-            return False
+            return "stopped"
 
         try:
-            return bool(backend.is_playing(self.loop_tag()))
+            return str(backend.playback_state(self.loop_tag()))
         except Exception:  # rpyc reraises backend and connection faults as arbitrary types
-            return False
+            return "stopped"
+
+    def pause_loop(self, paused: bool) -> None:
+        backend = getattr(self.plugin_base, "backend", None)
+        if backend is None:
+            return
+
+        try:
+            backend.pause_tag(self.loop_tag(), paused)
+        except Exception:
+            pass
 
     def stop_loop(self, fade_out: float = 0.0) -> None:
         backend = getattr(self.plugin_base, "backend", None)
@@ -799,16 +823,19 @@ class PlaySoundAction(SoundActionBase):
 
         return handle
 
-    def update_keep_playing_visibility(self) -> None:
-        row = getattr(self, "keep_playing_row", None)
-        if row is not None:
-            # Only this mode can leave a loop running after the key is released
-            row.widget.set_visible(self.mode is Mode.PLAY_TILL_TURNED_OFF)
+    def update_loop_option_visibility(self) -> None:
+        # Only this mode can leave a loop running after the key is released
+        relevant = self.mode is Mode.PLAY_TILL_TURNED_OFF
+
+        for name in ("keep_playing_row", "pause_row"):
+            row = getattr(self, name, None)
+            if row is not None:
+                row.widget.set_visible(relevant)
 
     def on_mode_change(self, widget, new_value, old_value):
         self.stop_looping()
         self.active = False
-        self.update_keep_playing_visibility()
+        self.update_loop_option_visibility()
 
     def on_pressed(self, data) -> None:
         if not self.sound_pool():
@@ -832,12 +859,17 @@ class PlaySoundAction(SoundActionBase):
 
             case Mode.PLAY_TILL_TURNED_OFF:
                 # Asked of the backend rather than remembered, so it survives recreation and restarts
-                if self.loop_is_playing():
-                    self.stop_loop(self.fade_out)
-                else:
+                state = self.loop_state()
+
+                if state == "stopped":
                     self.looping_handle = self._play(
                         loops=-1, fade_in=self.fade_in, tag=self.loop_tag()
                     )
+                elif not self.pause_instead_of_stop:
+                    self.stop_loop(self.fade_out)
+                else:
+                    # Pause keeps the position, so the next press resumes where it left off
+                    self.pause_loop(state == "playing")
 
     def on_released(self, data) -> None:
         if self.sound_pool() and Mode.RELEASE == self.mode:

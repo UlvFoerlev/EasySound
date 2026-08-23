@@ -76,15 +76,26 @@ The key will act as an on/off button. The audio is played on the relevant state.
 #### Play until Turned Off
 The sound starts on the first press and loops until pressed again.
 
-This mode adds one option, **Keep playing on other pages**:
+This mode adds two options.
+
+**Keep playing on other pages**
 
 - **Off** (default) — the sound stops when you leave the page. Right for a klaxon that belongs to one
   scene.
 - **On** — it plays until you turn it off, whichever page you are on. Right for an ambient bed or a
   background playlist.
 
+**Pause instead of stopping**
+
+- **Off** (default) — pressing again stops the sound, and the next press starts it from the beginning.
+- **On** — the key pauses and resumes, keeping its place. Turns a long track into something you can
+  hold and pick up again mid-scene rather than restarting.
+
+Leaving the page still stops the sound rather than pausing it, even with this on, because a scene change
+is a real stop. Combine it with "Keep playing on other pages" if you want the sound to survive the move.
+
 Either way the loop stays under the control of the key that started it, even after switching pages and
-coming back, so pressing again always stops it rather than starting a second copy.
+coming back, so pressing again always stops or pauses it rather than starting a second copy.
 
 ### Fades
 

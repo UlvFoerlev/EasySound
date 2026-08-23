@@ -16,6 +16,12 @@ SAMPLE_WIDTH = 2
 BUFFER_SECONDS = 0.25
 MAX_CONCURRENT_STREAMS = 32
 SAMPLE_FORMAT = pasimple.PA_SAMPLE_S16LE
+# How long a paused writer sleeps between checks; the server drains its own buffer meanwhile
+PAUSE_POLL_SECONDS = 0.05
+
+STOPPED = "stopped"
+PLAYING = "playing"
+PAUSED = "paused"
 
 
 # Worn devices: placing them in a room makes no sense, so they are treated apart from speakers
@@ -78,6 +84,7 @@ class Playback:
         # A caller-supplied identity, so a recreated action can still find the loop it started
         self.tag = tag
         self.stopping = False
+        self.paused = False
         self.stop_fade_out = 0.0
         self.writers = 0
 
@@ -280,6 +287,35 @@ class Backend(BackendBase):
                 for playback in self.playbacks.values()
             )
 
+    def playback_state(self, tag: str) -> str:
+        """One of stopped, playing or paused, so a button can be a three-state toggle."""
+        if not tag:
+            return STOPPED
+
+        with self.lock:
+            live = [
+                playback
+                for playback in self.playbacks.values()
+                if playback.tag == tag and not playback.stopping
+            ]
+
+        if not live:
+            return STOPPED
+
+        return PAUSED if all(playback.paused for playback in live) else PLAYING
+
+    def pause_tag(self, tag: str, paused: bool = True) -> int:
+        if not tag:
+            return 0
+
+        with self.lock:
+            tagged = [p for p in self.playbacks.values() if p.tag == tag and not p.stopping]
+
+        for playback in tagged:
+            playback.paused = bool(paused)
+
+        return len(tagged)
+
     def stop_tag(self, tag: str, fade_out: float = 0.0) -> int:
         if not tag:
             return 0
@@ -346,6 +382,11 @@ class Backend(BackendBase):
             stop_at = None
 
             while total:
+                # Held here rather than closed: the position is kept so a resume is seamless, and
+                # what the server has already buffered plays out as the tail
+                while playback.paused and not playback.stopping:
+                    time.sleep(PAUSE_POLL_SECONDS)
+
                 if playback.stopping and stop_at is None:
                     stop_at = played
                     stop_frames = int(playback.stop_fade_out * rate)
