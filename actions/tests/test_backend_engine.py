@@ -499,3 +499,58 @@ def test_stopping_discards_whatever_is_still_queued(backend, tmp_path, fake_stre
     # Draining here would keep playing the server's buffer, making a stop audibly late
     assert fake_streams[0].flushed is True
     assert fake_streams[0].drained is False
+
+
+def test_rate_scale_shifts_the_stream_rate(backend, tmp_path, monkeypatch):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+    opened = []
+
+    def _open(sink, rate, channels):
+        opened.append(rate)
+        return FakeStream()
+
+    monkeypatch.setattr(backend, "_open_stream", _open)
+
+    backend.play(str(path), sinks=["a"], rate_scale=1.1)
+    assert wait_for_idle(backend)
+    assert opened == [int(RATE * 1.1)]
+
+
+def test_rate_scale_defaults_to_the_file_rate(backend, tmp_path, monkeypatch):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+    opened = []
+    monkeypatch.setattr(backend, "_open_stream", lambda sink, rate, channels: opened.append(rate) or FakeStream())
+
+    backend.play(str(path), sinks=["a"])
+    assert wait_for_idle(backend)
+    assert opened == [RATE]
+
+
+def test_an_absurd_rate_scale_is_clamped(backend, tmp_path, monkeypatch):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+    opened = []
+    monkeypatch.setattr(backend, "_open_stream", lambda sink, rate, channels: opened.append(rate) or FakeStream())
+
+    backend.play(str(path), sinks=["a"], rate_scale=0.0)
+    assert wait_for_idle(backend)
+    assert opened[0] >= 1000
+
+
+def test_stop_all_stops_every_playback(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1)
+    backend.play(str(path), sinks=["b"], loops=-1)
+    assert len(backend.playbacks) == 2
+
+    assert backend.stop_all() == 2
+    assert wait_for_idle(backend)
+    assert all(stream.flushed for stream in fake_streams)
+
+
+def test_stop_all_with_nothing_playing(backend):
+    assert backend.stop_all() == 0

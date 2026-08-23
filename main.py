@@ -1,6 +1,7 @@
 # Import StreamController modules
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionHolder import ActionHolder
+from src.backend.PluginManager.ActionHolderGroup import ActionHolderGroup
 from src.backend.PluginManager.ActionInputSupport import ActionInputSupport
 from src.backend.PluginManager.PluginBase import PluginBase
 import json
@@ -16,13 +17,14 @@ from loguru import logger
 
 import globals as gl
 
-from .actions.legacy_action import action_id_in_pages, migrate_action_ids
+from .actions.legacy_action import migrate_action_ids, migrate_action_settings
 from .actions.play_sound.play_sound import PlaySoundAction
+from .actions.stop_all.stop_all import StopAllAction
 
 # Wiki
 # https://streamcontroller.github.io/docs/latest/
 
-# v1 typo'd Core447's own prefix (dev_core477 vs dev_core447); kept registered for backwards compatibility
+# v1 typo'd Core447's own prefix (dev_core477 vs dev_core447); kept only so pages can be migrated off it
 LEGACY_PLAY_SOUND_ACTION_ID = "dev_core477_EasySound::PlaySound"
 
 LOGO_PATH = Path(__file__).parent / "assets" / "logo.png"
@@ -46,8 +48,7 @@ class PluginEasySound(PluginBase):
         self.lm = self.locale_manager
 
         self.setup_backend()
-        # Kept: setup_actions needs to know a migration happened, since it erases its own evidence
-        self.migrated_pages = self.migrate_legacy_pages()
+        self.migrate_legacy_pages()
         self.setup_actions()
 
         # Register plugin
@@ -73,24 +74,25 @@ class PluginEasySound(PluginBase):
             action_support=action_support,
             icon=logo_image(),
         )
-        self.add_action_holder(self.action_play_sound)
-
-        # Registered only when in use: every registered holder gets a row in the action chooser, unconditionally
-        if not self.migrated_pages and not self.legacy_action_in_use():
-            return
-
-        # Only a safety net for pages already read into memory this session; it retires itself once
-        # migrate_legacy_pages has rewritten every page, because then no page mentions the old id
-        self.action_play_sound_legacy = ActionHolder(
+        self.action_stop_all = ActionHolder(
             plugin_base=self,
-            action_core=PlaySoundAction,
-            action_id=LEGACY_PLAY_SOUND_ACTION_ID,
-            action_name=self.lm.get("action.play-sound.name-legacy"),
+            action_core=StopAllAction,
+            action_id_suffix="StopAll",
+            action_name=self.lm.get("action.stop-all.name"),
             action_support=action_support,
-            description=self.lm.get("action.play-sound.description-legacy"),
+            description=self.lm.get("action.stop-all.description"),
             icon=logo_image(),
         )
-        self.add_action_holder(self.action_play_sound_legacy)
+
+        # Grouped because the chooser iterates loose holders as a set, so only a group keeps this order
+        self.action_group = ActionHolderGroup(
+            group_name=self.lm.get("plugin.group.name"),
+            action_holders=[self.action_play_sound, self.action_stop_all],
+        )
+        # Both must be added individually: the action index is built from action_holders, not the group
+        self.add_action_holder(self.action_play_sound)
+        self.add_action_holder(self.action_stop_all)
+        self.add_action_holder_group(self.action_group)
 
     def get_selector_icon(self) -> Gtk.Widget:
         return logo_image()
@@ -98,33 +100,44 @@ class PluginEasySound(PluginBase):
     def play_sound_action_id(self) -> str:
         return f"{self.get_plugin_id()}::PlaySound"
 
-    def migrate_legacy_pages(self) -> int:
-        """Rewrites the v1 action id in saved pages so the legacy holder can eventually be deleted."""
+    def migrate_legacy_pages(self) -> tuple[int, int]:
+        """Brings saved pages up to date. An old page imported later is rewritten on the next launch."""
         try:
             page_paths = gl.page_manager.get_pages()
         except Exception:
-            return 0
+            return 0, 0
 
-        migrated = 0
+        ids = sounds = 0
         for page_path in page_paths:
             try:
-                migrated += self.migrate_page(Path(page_path))
+                page_ids, page_sounds = self.migrate_page(Path(page_path))
             except Exception:  # one unwritable page must not stop the rest
                 continue
 
-        return migrated
+            ids += page_ids
+            sounds += page_sounds
 
-    def migrate_page(self, page_path: Path) -> int:
+        if ids or sounds:
+            logger.info(f"EasySound migrated {ids} action ids and {sounds} sound lists")
+
+        return ids, sounds
+
+    def migrate_page(self, page_path: Path) -> tuple[int, int]:
         try:
             data = json.loads(page_path.read_text())
         except (OSError, ValueError):
-            return 0
+            return 0, 0
 
-        changed = migrate_action_ids(
-            data, LEGACY_PLAY_SOUND_ACTION_ID, self.play_sound_action_id()
+        play_sound_id = self.play_sound_action_id()
+        ids = migrate_action_ids(data, LEGACY_PLAY_SOUND_ACTION_ID, play_sound_id)
+
+        # Runs for both ids: a page migrated by an earlier v2 build still holds single-filepath settings
+        sounds = migrate_action_settings(
+            data, {LEGACY_PLAY_SOUND_ACTION_ID, play_sound_id}
         )
-        if not changed:
-            return 0
+
+        if not ids and not sounds:
+            return 0, 0
 
         # The original goes outside the pages directory, where it cannot be picked up as a page itself
         backup_dir = Path(gl.DATA_PATH) / "easysound-v1-page-backups"
@@ -134,16 +147,7 @@ class PluginEasySound(PluginBase):
             shutil.copy2(page_path, backup)
 
         page_path.write_text(json.dumps(data, indent=4) + "\n")
-        return changed
-
-    def legacy_action_in_use(self) -> bool:
-        # Fails open when the page list is unavailable, for the same reason action_id_in_pages does
-        try:
-            page_paths = gl.page_manager.get_pages()
-        except Exception:
-            return True
-
-        return action_id_in_pages(LEGACY_PLAY_SOUND_ACTION_ID, page_paths)
+        return ids, sounds
 
     def audio_server(self) -> dict:
         """Read fresh rather than cached, so a server started after StreamController is still found."""

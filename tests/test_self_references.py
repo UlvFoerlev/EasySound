@@ -10,6 +10,7 @@ MODULES = [
     REPO_ROOT / "actions" / "group_dialog.py",
     REPO_ROOT / "actions" / "spatial_dialog.py",
     REPO_ROOT / "actions" / "icon_combo.py",
+    REPO_ROOT / "actions" / "stop_all" / "stop_all.py",
     REPO_ROOT / "main.py",
 ]
 
@@ -19,6 +20,7 @@ INHERITED = {
     "_get_property",
     "_set_property",
     "add_action_holder",
+    "add_action_holder_group",
     "add_event_assigner",
     "generative_ui_objects",
     "get_plugin_id",

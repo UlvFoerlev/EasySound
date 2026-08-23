@@ -181,6 +181,7 @@ class Backend(BackendBase):
         fade_out: float = 0.0,
         gains: list[list[float]] | None = None,
         delays: list[float] | None = None,
+        rate_scale: float = 1.0,
     ) -> str | None:
         key = path if isinstance(path, str) else str(path)
 
@@ -189,6 +190,9 @@ class Backend(BackendBase):
 
         sound = self.cache[key]
         _, rate, channels = sound
+
+        # Playing the same samples at another rate shifts pitch and speed together
+        rate = max(int(rate * max(rate_scale, 0.1)), 1000)
         # A mono sound has no sides to pan, so spatial playback upmixes it to stereo first
         play_channels = 2 if gains and channels == 1 else channels
 
@@ -229,6 +233,7 @@ class Backend(BackendBase):
                     weights,
                     delay,
                     play_channels,
+                    rate,
                     sound,
                     gain,
                     loops,
@@ -249,6 +254,16 @@ class Backend(BackendBase):
 
         playback.stop_fade_out = max(fade_out, 0.0)
         playback.stopping = True
+
+    def stop_all(self, fade_out: float = 0.0) -> int:
+        with self.lock:
+            playbacks = list(self.playbacks.values())
+
+        for playback in playbacks:
+            playback.stop_fade_out = max(fade_out, 0.0)
+            playback.stopping = True
+
+        return len(playbacks)
 
     def _open_stream(self, sink: str | None, rate: int, channels: int):
         if not self.stream_slots.acquire(blocking=False):
@@ -278,6 +293,7 @@ class Backend(BackendBase):
         weights,
         delay: float,
         play_channels: int,
+        rate: int,
         sound: tuple,
         gain: float,
         loops: int,
@@ -286,7 +302,7 @@ class Backend(BackendBase):
     ) -> None:
         try:
             # Passed in rather than re-read: the cache entry can be replaced while this thread runs
-            samples, rate, channels = sound
+            samples, _, channels = sound
             total = len(samples)
 
             # Wavefront delay: silence written up front, so this speaker starts late by that much

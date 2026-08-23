@@ -1,8 +1,8 @@
-from gi.repository import Adw, GLib, Gtk
+from pathlib import Path
+
+from gi.repository import Adw, Gio, GLib, Gtk
 from GtkHelper.ComboRow import SimpleComboRowItem
-from GtkHelper.FileDialogRow import FileDialogFilter
 from GtkHelper.GenerativeUI.ComboRow import ComboRow
-from GtkHelper.GenerativeUI.EntryRow import EntryRow
 from GtkHelper.GenerativeUI.ExpanderRow import ExpanderRow
 from GtkHelper.GenerativeUI.ScaleRow import ScaleRow
 from GtkHelper.GenerativeUI.SpinRow import SpinRow
@@ -25,10 +25,17 @@ from ..audio_targets import (
     target_icon,
     target_value,
 )
-from ..compat import FileDialogRow
 from ..group_dialog import SpeakerGroupDialog
 from ..icon_combo import IconComboRowItem, icon_factory
 from ..modes import MODE_LOCALES, Mode
+from ..playlist import (
+    ORDER_LOCALES,
+    ORDERS,
+    Picker,
+    normalize_order,
+    rate_scale,
+    resolve_sounds,
+)
 from ..sound_action_base import SoundActionBase
 from ..spatial import (
     DEFAULT_ROOM_SIZE,
@@ -55,8 +62,9 @@ class PlaySoundAction(SoundActionBase):
 
         self.looping_handle = None
         self.active = False
-        self.validate_timeout = None
-        self.warmed_path = None
+        self.warmed_paths: set[str] = set()
+        # Rotation and shuffle state is per action and deliberately not persisted
+        self.picker = Picker()
 
         # Dial DOWN/UP are kept so dial presses behave as they did under ActionBase's legacy dispatch
         self.add_event_assigner(
@@ -79,26 +87,46 @@ class PlaySoundAction(SoundActionBase):
     def on_ready(self) -> None:
         self.warm_sound_cache()
 
+    def sound_pool(self) -> list[str]:
+        return resolve_sounds(
+            self._get_property(key="sounds", default=None),
+            self.filepath,
+            self.extra_filepaths,
+        )
+
     def warm_sound_cache(self) -> None:
         # on_update calls on_ready by default, so the guard keeps this to one warm-up per path
-        path = self.filepath
-        if not path or path == self.warmed_path:
+        pending = [path for path in self.sound_pool() if path not in self.warmed_paths]
+        if not pending:
             return
 
         backend = getattr(self.plugin_base, "backend", None)
         if backend is None:
             return
 
-        try:
-            backend.warm_sound(path)
-        except Exception:  # rpyc reraises backend and connection faults as arbitrary types
-            return
+        for path in pending:
+            try:
+                backend.warm_sound(path)
+            except Exception:  # rpyc reraises backend and connection faults as arbitrary types
+                return
 
-        self.warmed_path = path
+            self.warmed_paths.add(path)
 
     @property
     def filepath(self) -> str:
         return self._get_property(key="filepath", default="", enforce_type=str)
+
+    @property
+    def extra_filepaths(self) -> list:
+        return self._get_property(key="extra_filepaths", default=[], enforce_type=list)
+
+    @property
+    def playback_order(self) -> str:
+        return normalize_order(self._get_property(key="playback_order", default=ORDERS[0]))
+
+    @property
+    def rate_variation(self) -> float:
+        return self._get_property(key="rate_variation", default=0.0, enforce_type=float)
 
     @property
     def speakers(self) -> str:
@@ -139,33 +167,30 @@ class PlaySoundAction(SoundActionBase):
         # generative_ui_objects is never cleared upstream, so rebuild it to avoid duplicated rows
         self.generative_ui_objects.clear()
 
-        self.filepath_row = FileDialogRow(
+        self.sounds_section = ExpanderRow(
             action_core=self,
-            var_name="filepath",
-            default_value="",
-            title="action.play-sound.sound_file",
-            dialog_title="action.play-sound.select_file",
-            filters=[
-                FileDialogFilter(
-                    name=self.plugin_base.lm.get("action.play-sound.audio_files"),
-                    filters=AUDIO_FILE_PATTERNS,
-                ),
-                FileDialogFilter(
-                    name=self.plugin_base.lm.get("action.play-sound.all_files"),
-                    filters=["*"],
-                ),
-            ],
-            on_change=self.on_filepath_picked,
+            var_name="section_sounds",
+            default_value=True,
+            title="action.play-sound.sounds",
+            subtitle="action.play-sound.sounds.subtitle",
+            start_expanded=True,
         )
 
-        # Paired with the dialog row so a path can still be typed or pasted; both write "filepath"
-        self.filepath_entry = EntryRow(
+        # Nested as the section's last child, and only meaningful once there are several sounds
+        self.order_row = ComboRow(
             action_core=self,
-            var_name="filepath",
-            default_value="",
-            title="action.play-sound.filepath",
-            on_change=self.on_filepath_typed,
+            var_name="playback_order",
+            default_value=ORDERS[0],
+            items=[
+                SimpleComboRowItem(
+                    value=order, label=self.plugin_base.lm.get(ORDER_LOCALES[order])
+                )
+                for order in ORDERS
+            ],
+            title="action.play-sound.order",
+            auto_add=False,
         )
+        self.rebuild_sounds_section()
 
         self.mode_row = ComboRow(
             action_core=self,
@@ -252,6 +277,20 @@ class PlaySoundAction(SoundActionBase):
         self.speakers_row.widget.set_factory(icon_factory())
         self.advanced_section.add_row(self.speakers_row.widget)
 
+        self.variation_row = SpinRow(
+            action_core=self,
+            var_name="rate_variation",
+            default_value=0.0,
+            min=0,
+            max=50,
+            step=1,
+            digits=0,
+            title="action.play-sound.variation",
+            subtitle="action.play-sound.variation.subtitle",
+            auto_add=False,
+        )
+        self.advanced_section.add_row(self.variation_row.widget)
+
         self.spatial_row = SwitchRow(
             action_core=self,
             var_name="spatial_enabled",
@@ -279,6 +318,96 @@ class PlaySoundAction(SoundActionBase):
 
         # The framework adds every auto_add row itself, so returning them here would double-parent them
         return []
+
+    def rebuild_sounds_section(self) -> None:
+        lm = self.plugin_base.lm
+        pool = self.sound_pool()
+        self.sounds_section.clear_rows()
+
+        for path in pool:
+            row = Adw.ActionRow(title=Path(path).name, subtitle=path)
+
+            # Checked locally rather than through the backend: a missing file is the common mistake
+            if not Path(path).is_file():
+                missing = Gtk.Image(
+                    icon_name="dialog-warning-symbolic",
+                    valign=Gtk.Align.CENTER,
+                    tooltip_text=lm.get("action.play-sound.sounds.missing"),
+                )
+                row.add_suffix(missing)
+
+            remove = Gtk.Button(
+                icon_name="user-trash-symbolic",
+                valign=Gtk.Align.CENTER,
+                css_classes=["flat"],
+                tooltip_text=lm.get("action.play-sound.sounds.remove"),
+            )
+            remove.connect("clicked", self.on_remove_sound, path)
+            row.add_suffix(remove)
+            self.sounds_section.add_row(row)
+
+        add_row = Adw.ActionRow(title=lm.get("action.play-sound.sounds.add"))
+        add_button = Gtk.Button(
+            label=lm.get("action.play-sound.sounds.browse"),
+            valign=Gtk.Align.CENTER,
+            css_classes=["suggested-action"] if not pool else [],
+        )
+        add_button.connect("clicked", self.on_add_sounds_clicked)
+        add_row.add_suffix(add_button)
+        self.sounds_section.add_row(add_row)
+
+        self.update_order_visibility()
+
+    def update_order_visibility(self) -> None:
+        row = getattr(self, "order_row", None)
+        if row is None:
+            return
+
+        # Re-added last on every rebuild, so it stays the final child of the section
+        self.sounds_section.add_row(row.widget)
+        # Nothing to order with a single sound, so it only appears once there are several
+        row.widget.set_visible(len(self.sound_pool()) > 1)
+
+    def save_sounds(self, paths: list) -> None:
+        # Writing "sounds" retires the pre-list settings for this action without touching them
+        self._set_property(key="sounds", value=list(paths))
+        self.rebuild_sounds_section()
+        self.warm_sound_cache()
+
+    def on_remove_sound(self, _button, path: str) -> None:
+        self.save_sounds([kept for kept in self.sound_pool() if kept != path])
+
+    def on_add_sounds_clicked(self, _button) -> None:
+        audio_filter = Gtk.FileFilter()
+        audio_filter.set_name(self.plugin_base.lm.get("action.play-sound.audio_files"))
+        for pattern in AUDIO_FILE_PATTERNS:
+            audio_filter.add_pattern(pattern)
+
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(audio_filter)
+
+        # Held so the dialog outlives this call, as open_multiple returns before the user picks
+        self.sounds_dialog = Gtk.FileDialog(
+            title=self.plugin_base.lm.get("action.play-sound.sounds.add"),
+            filters=filters,
+            default_filter=audio_filter,
+        )
+        self.sounds_dialog.open_multiple(callback=self.on_sounds_chosen)
+
+    def on_sounds_chosen(self, dialog, result) -> None:
+        try:
+            chosen = dialog.open_multiple_finish(result)
+        except GLib.Error:  # the user cancelled, which is not an error worth reporting
+            return
+
+        added = self.sound_pool()
+        for index in range(chosen.get_n_items()):
+            path = chosen.get_item(index).get_path()
+            # A non-local location has no filesystem path, so it cannot be played
+            if path and path not in added:
+                added.append(path)
+
+        self.save_sounds(added)
 
     def _sound_loads(self, path: str) -> bool:
         backend = getattr(self.plugin_base, "backend", None)
@@ -545,16 +674,22 @@ class PlaySoundAction(SoundActionBase):
     def _play(self, **kwargs):
         backend = getattr(self.plugin_base, "backend", None)
         handle = None
+        path = self.picker.pick(self.sound_pool(), self.playback_order)
+
+        if path is None:
+            self.show_error(duration=2)
+            return None
 
         if backend is not None:
             try:
                 sinks = self.resolve_sinks()
                 handle = backend.play(
-                    path=self.filepath,
+                    path=path,
                     sinks=sinks,
                     volume=self.volume,
                     gains=self.spatial_gains(sinks),
                     delays=self.spatial_delays(sinks),
+                    rate_scale=rate_scale(self.rate_variation),
                     **kwargs,
                 )
             except Exception:
@@ -565,42 +700,12 @@ class PlaySoundAction(SoundActionBase):
 
         return handle
 
-    def _queue_filepath_validation(self):
-        if self.validate_timeout is not None:
-            GLib.source_remove(self.validate_timeout)
-
-        self.validate_timeout = GLib.timeout_add(500, self._validate_filepath)
-
-    def _validate_filepath(self):
-        self.validate_timeout = None
-        path = self.filepath
-
-        if not path or self._sound_loads(path):
-            self.filepath_entry.widget.remove_css_class("error")
-            self.warmed_path = path or None  # _sound_loads already decoded it into the backend cache
-            if path:
-                # set_ui_value manages the widget's own signals, so syncing the sibling cannot loop
-                self.filepath_row.set_ui_value(path)
-        else:
-            self.filepath_entry.widget.add_css_class("error")
-
-        return GLib.SOURCE_REMOVE
-
-    def on_filepath_picked(self, widget, new_value, old_value):
-        self.stop_looping()
-        self.filepath_entry.set_ui_value(new_value or "")
-        self._queue_filepath_validation()
-
-    def on_filepath_typed(self, widget, new_value, old_value):
-        self.stop_looping()
-        self._queue_filepath_validation()
-
     def on_mode_change(self, widget, new_value, old_value):
         self.stop_looping()
         self.active = False
 
     def on_pressed(self, data) -> None:
-        if not self.filepath:
+        if not self.sound_pool():
             return
 
         match self.mode:
@@ -628,10 +733,10 @@ class PlaySoundAction(SoundActionBase):
                     self.stop_looping(fadeout=self.fade_out)
 
     def on_released(self, data) -> None:
-        if self.filepath and Mode.RELEASE == self.mode:
+        if self.sound_pool() and Mode.RELEASE == self.mode:
             self._play(fade_in=self.fade_in, fade_out=self.fade_out)
 
-        elif self.filepath and self.mode == Mode.HOLD:
+        elif self.sound_pool() and self.mode == Mode.HOLD:
             self.stop_looping(fadeout=self.fade_out)
 
     def stop_looping(self, fadeout: float = 0.0):

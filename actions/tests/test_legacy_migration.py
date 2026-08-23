@@ -73,3 +73,92 @@ def test_does_not_touch_a_matching_string_elsewhere():
     data = {"keys": {"0x0": {"comment": OLD}}}
     assert migrate_action_ids(data, OLD, NEW) == 0
     assert data["keys"]["0x0"]["comment"] == OLD
+
+
+IDS = {OLD, NEW}
+
+
+def action(**settings):
+    return {"keys": {"0x0": {"states": {"0": {"actions": [{"id": NEW, "settings": settings}]}}}}}
+
+
+def settings_of(data):
+    return data["keys"]["0x0"]["states"]["0"]["actions"][0]["settings"]
+
+
+def test_a_single_filepath_becomes_a_sound_list():
+    from actions.legacy_action import migrate_action_settings
+
+    data = action(filepath="/s/a.wav", mode="Release")
+    assert migrate_action_settings(data, IDS) == 1
+    assert settings_of(data)["sounds"] == ["/s/a.wav"]
+
+
+def test_the_original_settings_are_left_in_place():
+    from actions.legacy_action import migrate_action_settings
+
+    data = action(filepath="/s/a.wav", mode="Release", fade_out=0.5)
+    migrate_action_settings(data, IDS)
+    kept = settings_of(data)
+
+    # Left untouched so a rollback still finds its sound
+    assert kept["filepath"] == "/s/a.wav"
+    assert kept["mode"] == "Release"
+    assert kept["fade_out"] == 0.5
+
+
+def test_extras_are_folded_in_after_the_primary():
+    from actions.legacy_action import migrate_action_settings
+
+    data = action(filepath="/s/a.wav", extra_filepaths=["/s/b.wav", "/s/c.wav"])
+    migrate_action_settings(data, IDS)
+    assert settings_of(data)["sounds"] == ["/s/a.wav", "/s/b.wav", "/s/c.wav"]
+
+
+def test_an_existing_list_is_never_overwritten():
+    from actions.legacy_action import migrate_action_settings
+
+    data = action(filepath="/s/old.wav", sounds=["/s/chosen.wav"])
+    assert migrate_action_settings(data, IDS) == 0
+    assert settings_of(data)["sounds"] == ["/s/chosen.wav"]
+
+
+def test_an_emptied_list_stays_empty():
+    from actions.legacy_action import migrate_action_settings
+
+    # The user deleted every sound; the old filepath must not come back
+    data = action(filepath="/s/old.wav", sounds=[])
+    assert migrate_action_settings(data, IDS) == 0
+    assert settings_of(data)["sounds"] == []
+
+
+def test_an_action_with_no_sound_is_skipped():
+    from actions.legacy_action import migrate_action_settings
+
+    data = action(mode="Press")
+    assert migrate_action_settings(data, IDS) == 0
+    assert "sounds" not in settings_of(data)
+
+
+def test_other_plugins_are_untouched():
+    from actions.legacy_action import migrate_action_settings
+
+    data = {"actions": [{"id": "com_core447_OSPlugin::Delay", "settings": {"filepath": "/x"}}]}
+    assert migrate_action_settings(data, IDS) == 0
+    assert "sounds" not in data["actions"][0]["settings"]
+
+
+def test_settings_migration_is_idempotent():
+    from actions.legacy_action import migrate_action_settings
+
+    data = action(filepath="/s/a.wav")
+    migrate_action_settings(data, IDS)
+    assert migrate_action_settings(data, IDS) == 0
+
+
+def test_settings_migration_survives_odd_shapes():
+    from actions.legacy_action import migrate_action_settings
+
+    assert migrate_action_settings(None, IDS) == 0
+    assert migrate_action_settings({"id": NEW, "settings": "not a dict"}, IDS) == 0
+    assert migrate_action_settings({"id": NEW}, IDS) == 0

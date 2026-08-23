@@ -1,17 +1,6 @@
-from collections.abc import Iterable
-from pathlib import Path
 
+from .playlist import normalize_paths
 
-def action_id_in_pages(action_id: str, page_paths: Iterable[str]) -> bool:
-    # Fails open on an unreadable page: a hidden holder breaks pages, a needlessly shown one is cosmetic
-    for page_path in page_paths:
-        try:
-            if action_id in Path(page_path).read_text():
-                return True
-        except OSError:
-            return True
-
-    return False
 
 
 def migrate_action_ids(data, old_id: str, new_id: str) -> int:
@@ -32,3 +21,30 @@ def migrate_action_ids(data, old_id: str, new_id: str) -> int:
             changed += migrate_action_ids(value, old_id, new_id)
 
     return changed
+
+
+def migrate_action_settings(data, action_ids: set) -> int:
+    """Gives each of our actions a "sounds" list, so the single-filepath settings can be retired."""
+    changed = 0
+
+    if isinstance(data, dict):
+        settings = data.get("settings")
+        if data.get("id") in action_ids and isinstance(settings, dict):
+            # Only filled in when absent: a list the user has already edited is authoritative
+            if "sounds" not in settings:
+                sounds = normalize_paths(
+                    settings.get("filepath"), settings.get("extra_filepaths")
+                )
+                if sounds:
+                    settings["sounds"] = sounds
+                    changed += 1
+
+        for value in data.values():
+            changed += migrate_action_settings(value, action_ids)
+
+    elif isinstance(data, list):
+        for value in data:
+            changed += migrate_action_settings(value, action_ids)
+
+    return changed
+
