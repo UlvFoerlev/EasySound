@@ -2,11 +2,8 @@ import random
 
 from actions.playlist import (
     MAX_RATE_VARIATION,
-    RANDOM,
-    SEQUENCE,
-    SHUFFLE,
     ORDER_LOCALES,
-    ORDERS,
+    Order,
     Picker,
     clamp_variation,
     normalize_order,
@@ -36,44 +33,46 @@ def test_pool_trims_whitespace():
 
 
 def test_order_falls_back_to_random():
-    assert normalize_order("nonsense") == RANDOM
-    assert normalize_order(None) == RANDOM
-    for order in ORDERS:
-        assert normalize_order(order) == order
+    assert normalize_order("nonsense") is Order.RANDOM
+    assert normalize_order(None) is Order.RANDOM
+    for order in Order:
+        # Accepts the member and the stored string, since settings hold the value
+        assert normalize_order(order) is order
+        assert normalize_order(order.value) is order
 
 
 def test_every_order_has_a_locale_key():
-    assert set(ORDER_LOCALES) == set(ORDERS)
+    assert set(ORDER_LOCALES) == set(Order)
 
 
 def test_one_sound_always_plays_regardless_of_order():
     picker = Picker(random.Random(1))
-    for order in ORDERS:
+    for order in Order:
         assert picker.pick([A], order) == A
 
 
 def test_an_empty_pool_plays_nothing():
-    assert Picker().pick([], RANDOM) is None
+    assert Picker().pick([], Order.RANDOM) is None
 
 
 def test_sequence_rotates_and_wraps():
     picker = Picker()
-    picks = [picker.pick([A, B, C], SEQUENCE) for _ in range(7)]
+    picks = [picker.pick([A, B, C], Order.SEQUENCE) for _ in range(7)]
     assert picks == [A, B, C, A, B, C, A]
 
 
 def test_sequence_survives_the_pool_shrinking():
     picker = Picker()
-    picker.pick([A, B, C], SEQUENCE)
-    picker.pick([A, B, C], SEQUENCE)
+    picker.pick([A, B, C], Order.SEQUENCE)
+    picker.pick([A, B, C], Order.SEQUENCE)
     # The third sound is deleted while the cursor points past the new end
-    assert picker.pick([A], SEQUENCE) == A
+    assert picker.pick([A], Order.SEQUENCE) == A
 
 
 def test_shuffle_plays_everything_before_repeating():
     picker = Picker(random.Random(7))
     pool = [A, B, C]
-    first_round = {picker.pick(pool, SHUFFLE) for _ in range(3)}
+    first_round = {picker.pick(pool, Order.SHUFFLE) for _ in range(3)}
 
     assert first_round == set(pool)
 
@@ -81,21 +80,21 @@ def test_shuffle_plays_everything_before_repeating():
 def test_shuffle_avoids_an_immediate_repeat_across_rounds():
     picker = Picker(random.Random(3))
     pool = [A, B, C]
-    picks = [picker.pick(pool, SHUFFLE) for _ in range(12)]
+    picks = [picker.pick(pool, Order.SHUFFLE) for _ in range(12)]
 
     assert all(picks[i] != picks[i + 1] for i in range(len(picks) - 1))
 
 
 def test_shuffle_forgets_removed_sounds():
     picker = Picker(random.Random(5))
-    picker.pick([A, B, C], SHUFFLE)
+    picker.pick([A, B, C], Order.SHUFFLE)
     for _ in range(4):
-        assert picker.pick([A, B], SHUFFLE) in (A, B)
+        assert picker.pick([A, B], Order.SHUFFLE) in (A, B)
 
 
 def test_random_stays_inside_the_pool():
     picker = Picker(random.Random(2))
-    assert all(picker.pick([A, B], RANDOM) in (A, B) for _ in range(20))
+    assert all(picker.pick([A, B], Order.RANDOM) in (A, B) for _ in range(20))
 
 
 def test_variation_is_clamped_and_junk_safe():

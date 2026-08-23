@@ -9,13 +9,13 @@ from GtkHelper.GenerativeUI.SpinRow import SpinRow
 from GtkHelper.GenerativeUI.SwitchRow import SwitchRow
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.EventAssigner import EventAssigner
+from src.Signals import Signals
 
 from ..audio_targets import (
-    ALL,
-    CUSTOM,
-    DEFAULT,
     GROUP_PREFIX,
     ICON_UNAVAILABLE,
+    SinkKind,
+    Target,
     format_group_target,
     format_sink_target,
     missing_sinks,
@@ -30,7 +30,7 @@ from ..icon_combo import IconComboRowItem, icon_factory
 from ..modes import MODE_LOCALES, Mode
 from ..playlist import (
     ORDER_LOCALES,
-    ORDERS,
+    Order,
     Picker,
     normalize_order,
     rate_scale,
@@ -65,6 +65,9 @@ class PlaySoundAction(SoundActionBase):
         self.warmed_paths: set[str] = set()
         # Rotation and shuffle state is per action and deliberately not persisted
         self.picker = Picker()
+
+        # A loop is stopped when its page is left, unless the action opts out of that
+        self.connect(signal=Signals.ChangePage, callback=self.on_page_changed)
 
         # Dial DOWN/UP are kept so dial presses behave as they did under ActionBase's legacy dispatch
         self.add_event_assigner(
@@ -121,8 +124,10 @@ class PlaySoundAction(SoundActionBase):
         return self._get_property(key="extra_filepaths", default=[], enforce_type=list)
 
     @property
-    def playback_order(self) -> str:
-        return normalize_order(self._get_property(key="playback_order", default=ORDERS[0]))
+    def playback_order(self) -> Order:
+        return normalize_order(
+            self._get_property(key="playback_order", default=Order.RANDOM.value)
+        )
 
     @property
     def rate_variation(self) -> float:
@@ -130,7 +135,13 @@ class PlaySoundAction(SoundActionBase):
 
     @property
     def speakers(self) -> str:
-        return self._get_property(key="speakers", default=DEFAULT, enforce_type=str)
+        return self._get_property(key="speakers", default=Target.DEFAULT.value, enforce_type=str)
+
+    @property
+    def keep_playing_off_page(self) -> bool:
+        return self._get_property(
+            key="keep_playing_off_page", default=False, enforce_type=bool
+        )
 
     @property
     def spatial_enabled(self) -> bool:
@@ -180,12 +191,12 @@ class PlaySoundAction(SoundActionBase):
         self.order_row = ComboRow(
             action_core=self,
             var_name="playback_order",
-            default_value=ORDERS[0],
+            default_value=Order.RANDOM.value,
             items=[
                 SimpleComboRowItem(
-                    value=order, label=self.plugin_base.lm.get(ORDER_LOCALES[order])
+                    value=order.value, label=self.plugin_base.lm.get(ORDER_LOCALES[order])
                 )
-                for order in ORDERS
+                for order in Order
             ],
             title="action.play-sound.order",
             auto_add=False,
@@ -206,6 +217,15 @@ class PlaySoundAction(SoundActionBase):
             title="action.play-sound.select_mode",
             on_change=self.on_mode_change,
         )
+
+        self.keep_playing_row = SwitchRow(
+            action_core=self,
+            var_name="keep_playing_off_page",
+            default_value=False,
+            title="action.play-sound.keep-playing",
+            subtitle="action.play-sound.keep-playing.subtitle",
+        )
+        self.update_keep_playing_visibility()
 
         self.volume_row = ScaleRow(
             action_core=self,
@@ -267,7 +287,7 @@ class PlaySoundAction(SoundActionBase):
         self.speakers_row = ComboRow(
             action_core=self,
             var_name="speakers",
-            default_value=DEFAULT,
+            default_value=Target.DEFAULT.value,
             items=self.speaker_items(),
             title="action.play-sound.speakers",
             subtitle=self.speakers_subtitle(),
@@ -517,7 +537,7 @@ class PlaySoundAction(SoundActionBase):
         return [delays.get(sink, 0.0) for sink in sinks]
 
     def headset_sinks(self) -> set[str]:
-        return {sink["name"] for sink in self.list_sinks() if sink.get("kind") == "headset"}
+        return {sink["name"] for sink in self.list_sinks() if sink.get("kind") == SinkKind.HEADSET}
 
     def spatial_gains(self, sinks: list[str] | None) -> list[list[float]] | None:
         if not self.spatial_enabled:
@@ -570,7 +590,7 @@ class PlaySoundAction(SoundActionBase):
     def resolve_sinks(self) -> list[str] | None:
         target = self.speakers
 
-        if target in (DEFAULT, CUSTOM, ""):
+        if target in (Target.DEFAULT, Target.CUSTOM, ""):
             return None
 
         available = [sink["name"] for sink in self.list_sinks()]
@@ -580,14 +600,14 @@ class PlaySoundAction(SoundActionBase):
         lm = self.plugin_base.lm
         items = [
             IconComboRowItem(
-                value=DEFAULT,
+                value=Target.DEFAULT.value,
                 label=lm.get("action.play-sound.speakers.default"),
-                icon_name=target_icon(DEFAULT),
+                icon_name=target_icon(Target.DEFAULT),
             ),
             IconComboRowItem(
-                value=ALL,
+                value=Target.ALL.value,
                 label=lm.get("action.play-sound.speakers.all"),
-                icon_name=target_icon(ALL),
+                icon_name=target_icon(Target.ALL),
             ),
         ]
 
@@ -595,7 +615,7 @@ class PlaySoundAction(SoundActionBase):
             IconComboRowItem(
                 value=format_sink_target(sink["name"]),
                 label=sink["label"],
-                icon_name=sink_icon(sink.get("kind", "speaker"), sink.get("bluetooth", False)),
+                icon_name=sink_icon(sink.get("kind", SinkKind.SPEAKER.value), sink.get("bluetooth", False)),
             )
             for sink in self.list_sinks()
         ]
@@ -621,9 +641,9 @@ class PlaySoundAction(SoundActionBase):
 
         items.append(
             IconComboRowItem(
-                value=CUSTOM,
+                value=Target.CUSTOM.value,
                 label=lm.get("action.play-sound.speakers.custom"),
-                icon_name=target_icon(CUSTOM),
+                icon_name=target_icon(Target.CUSTOM),
             )
         )
         return items
@@ -651,12 +671,12 @@ class PlaySoundAction(SoundActionBase):
 
     def on_speakers_change(self, widget, new_value, old_value):
         # ComboRow passes item objects here, not the stored strings
-        if target_value(new_value) != CUSTOM:
+        if target_value(new_value) != Target.CUSTOM:
             return
 
         # "Custom..." acts as a button, so the previous selection is restored before opening the editor
         previous = target_value(old_value)
-        previous = previous if previous and previous != CUSTOM else DEFAULT
+        previous = previous if previous and previous != Target.CUSTOM else Target.DEFAULT
         self.speakers_row.set_value(previous)
         self.speakers_row.set_ui_value(previous)
         self.open_group_dialog()
@@ -670,6 +690,47 @@ class PlaySoundAction(SoundActionBase):
             on_saved=self.save_speaker_groups,
         )
         self.group_dialog.present(self.speakers_row.widget)
+
+    def loop_tag(self) -> str:
+        """Stable across action recreation, so a returning action can still stop its own loop."""
+        page = getattr(self.page, "json_path", "") or ""
+        ident = getattr(self.input_ident, "json_identifier", "") or ""
+
+        return f"{page}|{ident}|{self.state}|{self.action_id}"
+
+    def loop_is_playing(self) -> bool:
+        backend = getattr(self.plugin_base, "backend", None)
+        if backend is None:
+            return False
+
+        try:
+            return bool(backend.is_playing(self.loop_tag()))
+        except Exception:  # rpyc reraises backend and connection faults as arbitrary types
+            return False
+
+    def stop_loop(self, fade_out: float = 0.0) -> None:
+        backend = getattr(self.plugin_base, "backend", None)
+        self.looping_handle = None
+
+        if backend is None:
+            return
+
+        try:
+            backend.stop_tag(self.loop_tag(), fade_out)
+        except Exception:
+            pass
+
+    def on_page_changed(self, controller, old_path, new_path) -> None:
+        if self.keep_playing_off_page:
+            return
+
+        # Only this deck's page change matters, and only when the new page is not ours
+        if controller is not getattr(self, "deck_controller", None):
+            return
+        if new_path == getattr(self.page, "json_path", None):
+            return
+
+        self.stop_loop(self.fade_out)
 
     def _play(self, **kwargs):
         backend = getattr(self.plugin_base, "backend", None)
@@ -700,9 +761,16 @@ class PlaySoundAction(SoundActionBase):
 
         return handle
 
+    def update_keep_playing_visibility(self) -> None:
+        row = getattr(self, "keep_playing_row", None)
+        if row is not None:
+            # Only this mode can leave a loop running after the key is released
+            row.widget.set_visible(self.mode is Mode.PLAY_TILL_TURNED_OFF)
+
     def on_mode_change(self, widget, new_value, old_value):
         self.stop_looping()
         self.active = False
+        self.update_keep_playing_visibility()
 
     def on_pressed(self, data) -> None:
         if not self.sound_pool():
@@ -725,12 +793,13 @@ class PlaySoundAction(SoundActionBase):
                 self.looping_handle = self._play(loops=-1, fade_in=self.fade_in)
 
             case Mode.PLAY_TILL_TURNED_OFF:
-                self.active = not self.active
-                if self.active:
-                    self.looping_handle = self._play(loops=-1, fade_in=self.fade_in)
-
+                # Asked of the backend rather than remembered, so it survives recreation and restarts
+                if self.loop_is_playing():
+                    self.stop_loop(self.fade_out)
                 else:
-                    self.stop_looping(fadeout=self.fade_out)
+                    self.looping_handle = self._play(
+                        loops=-1, fade_in=self.fade_in, tag=self.loop_tag()
+                    )
 
     def on_released(self, data) -> None:
         if self.sound_pool() and Mode.RELEASE == self.mode:

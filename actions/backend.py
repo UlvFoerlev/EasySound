@@ -20,6 +20,7 @@ SAMPLE_FORMAT = pasimple.PA_SAMPLE_S16LE
 
 # Worn devices: placing them in a room makes no sense, so they are treated apart from speakers
 HEADSET_HINTS = ("headset", "headphone", "earbud", "earphone", "hands-free")
+# Duplicated on purpose: the frontend's SinkKind cannot be imported here, so a test asserts they agree
 HEADSET = "headset"
 SPEAKER = "speaker"
 
@@ -73,7 +74,9 @@ def file_stamp(path: str) -> tuple[float, int] | None:
 class Playback:
     """One logical sound, fanned out over one stream per target sink."""
 
-    def __init__(self):
+    def __init__(self, tag: str = ""):
+        # A caller-supplied identity, so a recreated action can still find the loop it started
+        self.tag = tag
         self.stopping = False
         self.stop_fade_out = 0.0
         self.writers = 0
@@ -182,6 +185,7 @@ class Backend(BackendBase):
         gains: list[list[float]] | None = None,
         delays: list[float] | None = None,
         rate_scale: float = 1.0,
+        tag: str = "",
     ) -> str | None:
         key = path if isinstance(path, str) else str(path)
 
@@ -215,7 +219,7 @@ class Backend(BackendBase):
             return None
 
         gain = max(min(volume / 100.0, 1.0), 0.0)
-        playback = Playback()
+        playback = Playback(tag=tag)
 
         with self.lock:
             self.handle_counter += 1
@@ -264,6 +268,30 @@ class Backend(BackendBase):
             playback.stopping = True
 
         return len(playbacks)
+
+    def is_playing(self, tag: str) -> bool:
+        """Authoritative on/off state: it survives the action being recreated or the app restarting."""
+        if not tag:
+            return False
+
+        with self.lock:
+            return any(
+                playback.tag == tag and not playback.stopping
+                for playback in self.playbacks.values()
+            )
+
+    def stop_tag(self, tag: str, fade_out: float = 0.0) -> int:
+        if not tag:
+            return 0
+
+        with self.lock:
+            tagged = [p for p in self.playbacks.values() if p.tag == tag]
+
+        for playback in tagged:
+            playback.stop_fade_out = max(fade_out, 0.0)
+            playback.stopping = True
+
+        return len(tagged)
 
     def _open_stream(self, sink: str | None, rate: int, channels: int):
         if not self.stream_slots.acquire(blocking=False):

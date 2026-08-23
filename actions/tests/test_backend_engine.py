@@ -554,3 +554,69 @@ def test_stop_all_stops_every_playback(backend, tmp_path, fake_streams):
 
 def test_stop_all_with_nothing_playing(backend):
     assert backend.stop_all() == 0
+
+
+def test_sink_kinds_match_the_frontend_enum(backend_module):
+    """The backend cannot import the frontend, so the two spellings of these values must be checked."""
+    from actions.audio_targets import SinkKind
+
+    assert backend_module.HEADSET == SinkKind.HEADSET.value
+    assert backend_module.SPEAKER == SinkKind.SPEAKER.value
+    assert {backend_module.HEADSET, backend_module.SPEAKER} == {kind.value for kind in SinkKind}
+
+
+def test_a_tagged_loop_reports_itself_as_playing(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    assert backend.is_playing("bed") is False
+    backend.play(str(path), sinks=["a"], loops=-1, tag="bed")
+    assert backend.is_playing("bed") is True
+
+    backend.stop_tag("bed")
+    assert wait_for_idle(backend)
+    assert backend.is_playing("bed") is False
+
+
+def test_stopping_a_tag_leaves_other_tags_alone(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="rain")
+    backend.play(str(path), sinks=["b"], loops=-1, tag="klaxon")
+
+    assert backend.stop_tag("klaxon") == 1
+    assert backend.is_playing("rain") is True
+
+    backend.stop_tag("rain")
+    assert wait_for_idle(backend)
+
+
+def test_an_untagged_sound_is_never_matched(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1)
+    assert backend.is_playing("") is False
+    assert backend.stop_tag("") == 0
+
+    backend.stop_all()
+    assert wait_for_idle(backend)
+
+
+def test_a_stopping_loop_no_longer_counts_as_playing(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="bed")
+    backend.stop_tag("bed", fade_out=5.0)
+
+    # Marked stopping, so a second press starts a new loop rather than toggling nothing
+    assert backend.is_playing("bed") is False
+    backend.stop_all()
+    assert wait_for_idle(backend)
+
+
+def test_unknown_tags_are_harmless(backend):
+    assert backend.stop_tag("nothing-here") == 0
+    assert backend.is_playing("nothing-here") is False

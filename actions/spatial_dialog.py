@@ -8,10 +8,9 @@ from collections.abc import Callable
 from gi.repository import Adw, Gtk
 
 from .spatial import (
-    LEFT,
+    Side,
     MAX_ROOM_SIZE,
     MIN_ROOM_SIZE,
-    RIGHT,
     clamp_room_size,
     clamp_unit,
     dbap_gains,
@@ -143,9 +142,9 @@ class SpatialDialog(Adw.Dialog):
         sink, _, side = emitter.partition("#")
         label = self.labels.get(sink, sink)[:14]
 
-        if side == LEFT:
+        if side == Side.LEFT:
             return f"{label} [{self.lm.get('action.play-sound.spatial.left')}]"
-        if side == RIGHT:
+        if side == Side.RIGHT:
             return f"{label} [{self.lm.get('action.play-sound.spatial.right')}]"
 
         return label

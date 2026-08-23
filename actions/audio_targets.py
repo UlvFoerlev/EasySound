@@ -1,9 +1,23 @@
 import uuid
+from enum import Enum
 from typing import Any
 
-DEFAULT = "default"
-ALL = "all"
-CUSTOM = "custom"
+
+class Target(str, Enum):
+    """A bare target; a specific device or group is stored prefixed instead."""
+
+    DEFAULT = "default"
+    ALL = "all"
+    CUSTOM = "custom"
+
+
+class SinkKind(str, Enum):
+    """Mirrors the kinds actions/backend.py reports, which cannot be imported across the boundary."""
+
+    SPEAKER = "speaker"
+    HEADSET = "headset"
+
+
 SINK_PREFIX = "sink:"
 GROUP_PREFIX = "group:"
 
@@ -72,10 +86,10 @@ def resolve_target(
     """Returns the sinks to play on, or None to mean "let the server pick its default"."""
     groups = groups or []
 
-    if not target or target == DEFAULT or target == CUSTOM:
+    if not target or target == Target.DEFAULT or target == Target.CUSTOM:
         return None
 
-    if target == ALL:
+    if target == Target.ALL:
         return list(available)
 
     if target.startswith(SINK_PREFIX):
@@ -141,9 +155,9 @@ ICON_CUSTOM = "document-edit-symbolic"
 ICON_UNAVAILABLE = "dialog-warning-symbolic"
 
 
-def sink_icon(kind: str = "speaker", bluetooth: bool = False) -> str:
+def sink_icon(kind: Any = SinkKind.SPEAKER, bluetooth: bool = False) -> str:
     """Worn beats wireless: a bluetooth headset is more usefully shown as a headset."""
-    if kind == "headset":
+    if kind == SinkKind.HEADSET:
         return ICON_HEADSET
     if bluetooth:
         return ICON_BLUETOOTH
@@ -152,11 +166,11 @@ def sink_icon(kind: str = "speaker", bluetooth: bool = False) -> str:
 
 
 def target_icon(target: str) -> str:
-    if target == DEFAULT or not target:
+    if target == Target.DEFAULT or not target:
         return ICON_DEFAULT
-    if target == ALL:
+    if target == Target.ALL:
         return ICON_ALL
-    if target == CUSTOM:
+    if target == Target.CUSTOM:
         return ICON_CUSTOM
     if target.startswith(GROUP_PREFIX):
         return ICON_GROUP

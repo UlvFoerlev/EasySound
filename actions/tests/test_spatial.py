@@ -224,9 +224,17 @@ def test_one_device_keeps_its_level_when_spatial_is_enabled():
 
 
 def test_emitter_ids_and_defaults():
-    from actions.spatial import EAR_SEPARATION, default_emitter_position, emitter_id, emitters_for
+    from actions.spatial import (
+        EAR_SEPARATION,
+        Side,
+        default_emitter_position,
+        emitter_id,
+        emitters_for,
+    )
 
     assert emitter_id("sink") == "sink"
+    # Both forms: the enum in code, a plain string when parsed back out of settings
+    assert emitter_id("sink", Side.LEFT) == "sink#left"
     assert emitter_id("sink", "left") == "sink#left"
     assert emitters_for("spk", is_headset=False) == ["spk"]
     assert emitters_for("hs", is_headset=True) == ["hs#left", "hs#right"]

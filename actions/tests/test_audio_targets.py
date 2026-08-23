@@ -1,7 +1,5 @@
 from actions.audio_targets import (
-    ALL,
-    CUSTOM,
-    DEFAULT,
+    Target,
     find_group,
     format_group_target,
     format_sink_target,
@@ -16,7 +14,7 @@ GROUPS = [{"id": "g1", "name": "Living room", "sinks": [SINK_A, SINK_B]}]
 
 
 def test_default_means_let_the_server_choose():
-    assert resolve_target(DEFAULT, [SINK_A]) is None
+    assert resolve_target(Target.DEFAULT, [SINK_A]) is None
 
 
 def test_empty_target_falls_back_to_default():
@@ -25,11 +23,11 @@ def test_empty_target_falls_back_to_default():
 
 def test_custom_never_plays_to_a_device():
     # "Custom..." only opens the editor, so it must behave as default rather than as a target
-    assert resolve_target(CUSTOM, [SINK_A]) is None
+    assert resolve_target(Target.CUSTOM, [SINK_A]) is None
 
 
 def test_all_uses_every_present_sink():
-    assert resolve_target(ALL, [SINK_A, SINK_B]) == [SINK_A, SINK_B]
+    assert resolve_target(Target.ALL, [SINK_A, SINK_B]) == [SINK_A, SINK_B]
 
 
 def test_single_sink_target():
@@ -64,7 +62,7 @@ def test_unknown_target_shape_falls_back_to_default():
 def test_missing_sinks_reports_absent_members():
     assert missing_sinks(format_group_target("g1"), [SINK_A], GROUPS) == [SINK_B]
     assert missing_sinks(format_sink_target(SINK_B), [SINK_A]) == [SINK_B]
-    assert missing_sinks(DEFAULT, []) == []
+    assert missing_sinks(Target.DEFAULT, []) == []
 
 
 def test_find_group():
@@ -143,14 +141,14 @@ class FakeComboItem:
 def test_target_value_unwraps_combo_items():
     from actions.audio_targets import target_value
 
-    assert target_value(FakeComboItem(CUSTOM)) == CUSTOM
+    assert target_value(FakeComboItem(Target.CUSTOM)) == Target.CUSTOM
     assert target_value(FakeComboItem(format_sink_target(SINK_A))) == format_sink_target(SINK_A)
 
 
 def test_target_value_passes_plain_strings_through():
     from actions.audio_targets import target_value
 
-    assert target_value(DEFAULT) == DEFAULT
+    assert target_value(Target.DEFAULT) == Target.DEFAULT
 
 
 def test_target_value_handles_missing_and_odd_values():
@@ -188,9 +186,9 @@ def test_target_icons():
         target_icon,
     )
 
-    assert target_icon(DEFAULT) == ICON_DEFAULT
+    assert target_icon(Target.DEFAULT) == ICON_DEFAULT
     assert target_icon("") == ICON_DEFAULT
-    assert target_icon(ALL) == ICON_ALL
-    assert target_icon(CUSTOM) == ICON_CUSTOM
+    assert target_icon(Target.ALL) == ICON_ALL
+    assert target_icon(Target.CUSTOM) == ICON_CUSTOM
     assert target_icon(format_group_target("g1")) == ICON_GROUP
     assert target_icon(format_sink_target(SINK_A)) == ICON_SPEAKER

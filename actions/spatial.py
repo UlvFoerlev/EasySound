@@ -1,4 +1,5 @@
 import math
+from enum import Enum
 from typing import Any
 
 # Distance added before the rolloff, so a source sitting on a speaker cannot produce an infinite gain
@@ -157,28 +158,35 @@ def stereo_balance(source_x: float) -> tuple[float, float]:
     return (1.0 if x <= 0 else round(1.0 - x, 6), 1.0 if x >= 0 else round(1.0 + x, 6))
 
 
-LEFT = "left"
-RIGHT = "right"
+class Side(str, Enum):
+    LEFT = "left"
+    RIGHT = "right"
+
+
 EAR_SEPARATION = 0.3
 
 
-def emitter_id(sink: str, side: str | None = None) -> str:
+def emitter_id(sink: str, side: "Side | str | None" = None) -> str:
     """A speaker is one emitter; a headset is two, one per ear, each placed on its own."""
-    return sink if side is None else f"{sink}#{side}"
+    if side is None:
+        return sink
+
+    # Accepts a plain string too, since emitter ids are parsed back out of saved settings
+    return f"{sink}#{getattr(side, 'value', side)}"
 
 
 def emitters_for(sink: str, is_headset: bool) -> list[str]:
     if is_headset:
-        return [emitter_id(sink, LEFT), emitter_id(sink, RIGHT)]
+        return [emitter_id(sink, Side.LEFT), emitter_id(sink, Side.RIGHT)]
 
     return [emitter_id(sink)]
 
 
 def default_emitter_position(emitter: str) -> tuple[float, float]:
     # Ears sit either side of the listener, so a headset starts as a head-width pair
-    if emitter.endswith(f"#{LEFT}"):
+    if emitter.endswith(f"#{Side.LEFT.value}"):
         return (-EAR_SEPARATION, 0.0)
-    if emitter.endswith(f"#{RIGHT}"):
+    if emitter.endswith(f"#{Side.RIGHT.value}"):
         return (EAR_SEPARATION, 0.0)
 
     return (0.0, 0.0)
@@ -226,8 +234,8 @@ def channel_gains(
     for sink in sinks:
         if sink in headsets:
             channels[sink] = (
-                round(gains.get(emitter_id(sink, LEFT), 1.0), 6),
-                round(gains.get(emitter_id(sink, RIGHT), 1.0), 6),
+                round(gains.get(emitter_id(sink, Side.LEFT), 1.0), 6),
+                round(gains.get(emitter_id(sink, Side.RIGHT), 1.0), 6),
             )
         else:
             gain = gains.get(emitter_id(sink), 1.0)

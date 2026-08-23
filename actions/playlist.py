@@ -1,15 +1,18 @@
 import random
+from enum import Enum
 from typing import Any
 
-RANDOM = "random"
-SEQUENCE = "sequence"
-SHUFFLE = "shuffle"
 
-ORDERS = (RANDOM, SEQUENCE, SHUFFLE)
+class Order(str, Enum):
+    RANDOM = "random"
+    SEQUENCE = "sequence"
+    SHUFFLE = "shuffle"
+
+
 ORDER_LOCALES = {
-    RANDOM: "action.play-sound.order.random",
-    SEQUENCE: "action.play-sound.order.sequence",
-    SHUFFLE: "action.play-sound.order.shuffle",
+    Order.RANDOM: "action.play-sound.order.random",
+    Order.SEQUENCE: "action.play-sound.order.sequence",
+    Order.SHUFFLE: "action.play-sound.order.shuffle",
 }
 
 MAX_RATE_VARIATION = 50.0
@@ -38,8 +41,11 @@ def resolve_sounds(sounds: Any, primary: Any, extra: Any) -> list[str]:
     return normalize_paths(primary, extra)
 
 
-def normalize_order(value: Any) -> str:
-    return value if value in ORDERS else RANDOM
+def normalize_order(value: Any) -> Order:
+    try:
+        return Order(value)
+    except ValueError:
+        return Order.RANDOM
 
 
 class Picker:
@@ -50,7 +56,7 @@ class Picker:
         self.cursor = 0
         self.bag: list[str] = []
 
-    def pick(self, pool: list[str], order: Any = RANDOM) -> str | None:
+    def pick(self, pool: list[str], order: Any = Order.RANDOM) -> str | None:
         if not pool:
             return None
         if len(pool) == 1:
@@ -58,7 +64,7 @@ class Picker:
 
         order = normalize_order(order)
 
-        if order == SEQUENCE:
+        if order is Order.SEQUENCE:
             # Wraps on the current pool, so removing a sound cannot leave the cursor out of range
             self.cursor %= len(pool)
             path = pool[self.cursor]
@@ -66,7 +72,7 @@ class Picker:
 
             return path
 
-        if order == SHUFFLE:
+        if order is Order.SHUFFLE:
             # A bag that refills only once empty, so nothing repeats until everything has played
             self.bag = [path for path in self.bag if path in pool]
             if not self.bag:
