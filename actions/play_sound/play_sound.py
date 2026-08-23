@@ -403,8 +403,14 @@ class PlaySoundAction(SoundActionBase):
         for pattern in AUDIO_FILE_PATTERNS:
             audio_filter.add_pattern(pattern)
 
+        # Patterns are case sensitive and the list is not exhaustive, so an escape hatch is offered
+        all_filter = Gtk.FileFilter()
+        all_filter.set_name(self.plugin_base.lm.get("action.play-sound.all_files"))
+        all_filter.add_pattern("*")
+
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(audio_filter)
+        filters.append(all_filter)
 
         # Held so the dialog outlives this call, as open_multiple returns before the user picks
         self.sounds_dialog = Gtk.FileDialog(
@@ -459,8 +465,12 @@ class PlaySoundAction(SoundActionBase):
         except Exception:  # rpyc reraises backend and connection faults as arbitrary types
             return []
 
-    def speaker_groups(self) -> list[dict]:
-        return normalize_groups(self.plugin_base.get_settings().get("speaker_groups"))
+    def plugin_settings(self, settings: dict | None = None) -> dict:
+        # Passed in on the key-press path, so one press reads the settings file at most once
+        return settings if settings is not None else self.plugin_base.get_settings()
+
+    def speaker_groups(self, settings: dict | None = None) -> list[dict]:
+        return normalize_groups(self.plugin_settings(settings).get("speaker_groups"))
 
     def save_speaker_groups(self, groups: list[dict]) -> None:
         # Plugin settings rather than action settings, so every action and page shares the groups
@@ -484,8 +494,8 @@ class PlaySoundAction(SoundActionBase):
         )
         row.widget.set_subtitle(self.speakers_subtitle() or "")
 
-    def speaker_positions(self) -> dict:
-        return normalize_positions(self.plugin_base.get_settings().get("speaker_positions"))
+    def speaker_positions(self, settings: dict | None = None) -> dict:
+        return normalize_positions(self.plugin_settings(settings).get("speaker_positions"))
 
     def save_speaker_positions(self, positions: dict) -> None:
         # Where a speaker physically stands belongs to the plugin, not to one action
@@ -501,9 +511,9 @@ class PlaySoundAction(SoundActionBase):
     def save_spatial_source(self, source) -> None:
         self._set_property(key="spatial_source", value=list(clamp_position(source)))
 
-    def room_settings(self) -> tuple[float, bool]:
+    def room_settings(self, settings: dict | None = None) -> tuple[float, bool]:
         # The room and its delay switch describe the physical setup, so they live with the plugin
-        settings = self.plugin_base.get_settings()
+        settings = self.plugin_settings(settings)
 
         return (
             clamp_room_size(settings.get("room_size", DEFAULT_ROOM_SIZE)),
@@ -516,19 +526,24 @@ class PlaySoundAction(SoundActionBase):
         settings["spatial_delay"] = bool(delay_enabled)
         self.plugin_base.set_settings(settings)
 
-    def spatial_delays(self, sinks: list[str] | None) -> list[float] | None:
+    def spatial_delays(
+        self,
+        sinks: list[str] | None,
+        available: list[dict] | None = None,
+        settings: dict | None = None,
+    ) -> list[float] | None:
         if not self.spatial_enabled or not sinks:
             return None
 
-        room_size, delay_enabled = self.room_settings()
-        headsets = self.headset_sinks()
+        room_size, delay_enabled = self.room_settings(settings)
+        headsets = self.headset_sinks(available)
         speakers = [sink for sink in sinks if sink not in headsets]
 
         # Delays need two speakers to mean anything, and a worn device has no flight time at all
         if not delay_enabled or len(speakers) < 2:
             return None
 
-        positions = self.speaker_positions()
+        positions = self.speaker_positions(settings)
         delays = source_delays(
             self.spatial_source,
             {sink: positions.get(sink, (0.0, 0.0)) for sink in speakers},
@@ -536,10 +551,17 @@ class PlaySoundAction(SoundActionBase):
         )
         return [delays.get(sink, 0.0) for sink in sinks]
 
-    def headset_sinks(self) -> set[str]:
-        return {sink["name"] for sink in self.list_sinks() if sink.get("kind") == SinkKind.HEADSET}
+    def headset_sinks(self, available: list[dict] | None = None) -> set[str]:
+        sinks = available if available is not None else self.list_sinks()
 
-    def spatial_gains(self, sinks: list[str] | None) -> list[list[float]] | None:
+        return {sink["name"] for sink in sinks if sink.get("kind") == SinkKind.HEADSET}
+
+    def spatial_gains(
+        self,
+        sinks: list[str] | None,
+        available: list[dict] | None = None,
+        settings: dict | None = None,
+    ) -> list[list[float]] | None:
         if not self.spatial_enabled:
             return None
 
@@ -550,7 +572,10 @@ class PlaySoundAction(SoundActionBase):
             return [list(stereo_balance(source[0]))]
 
         per_sink = channel_gains(
-            source, sinks, self.speaker_positions(), self.headset_sinks()
+            source,
+            sinks,
+            self.speaker_positions(settings),
+            self.headset_sinks(available),
         )
         return [list(per_sink.get(sink, (1.0, 1.0))) for sink in sinks]
 
@@ -587,14 +612,18 @@ class PlaySoundAction(SoundActionBase):
         )
         self.spatial_dialog.present(self.spatial_button_row)
 
-    def resolve_sinks(self) -> list[str] | None:
+    def resolve_sinks(
+        self, available: list[dict] | None = None, settings: dict | None = None
+    ) -> list[str] | None:
         target = self.speakers
 
         if target in (Target.DEFAULT, Target.CUSTOM, ""):
             return None
 
-        available = [sink["name"] for sink in self.list_sinks()]
-        return resolve_target(target, available, self.speaker_groups())
+        sinks = available if available is not None else self.list_sinks()
+        return resolve_target(
+            target, [sink["name"] for sink in sinks], self.speaker_groups(settings)
+        )
 
     def speaker_items(self) -> list[IconComboRowItem]:
         lm = self.plugin_base.lm
@@ -743,13 +772,22 @@ class PlaySoundAction(SoundActionBase):
 
         if backend is not None:
             try:
-                sinks = self.resolve_sinks()
+                # Gathered once: a Default target with spatial off touches neither rpyc nor the disk
+                needs_devices = self.spatial_enabled or self.speakers not in (
+                    Target.DEFAULT,
+                    Target.CUSTOM,
+                    "",
+                )
+                available = self.list_sinks() if needs_devices else None
+                settings = self.plugin_base.get_settings() if needs_devices else None
+
+                sinks = self.resolve_sinks(available, settings)
                 handle = backend.play(
                     path=path,
                     sinks=sinks,
                     volume=self.volume,
-                    gains=self.spatial_gains(sinks),
-                    delays=self.spatial_delays(sinks),
+                    gains=self.spatial_gains(sinks, available, settings),
+                    delays=self.spatial_delays(sinks, available, settings),
                     rate_scale=rate_scale(self.rate_variation),
                     **kwargs,
                 )
