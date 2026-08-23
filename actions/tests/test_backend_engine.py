@@ -101,6 +101,20 @@ def as_samples(stream):
     return np.frombuffer(bytes(stream.payload), dtype=np.int16).reshape(-1, CHANNELS)
 
 
+def write_mono(path, seconds=0.1, value=9000):
+    frames = int(RATE * seconds)
+    sf.write(str(path), np.full((frames, 1), value, dtype=np.int16), RATE, subtype="PCM_16")
+    return frames
+
+def wait_until(predicate, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
 def wait_for_idle(backend, timeout=10.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -316,22 +330,19 @@ def test_an_empty_sink_query_is_not_cached(backend, monkeypatch):
     assert len(calls) == 2
 
 
-def test_channel_weights_defaults_to_unity(backend_module):
-    weights = backend_module.channel_weights(None, 2)
-    assert list(weights) == [1.0, 1.0]
-
-
-def test_channel_weights_passes_a_matching_pair(backend_module):
-    assert list(backend_module.channel_weights([1.0, 0.25], 2)) == [1.0, 0.25]
-
-
-def test_channel_weights_collapses_for_mono(backend_module):
-    # A mono file has no sides, so panning must not silence it
-    assert list(backend_module.channel_weights([1.0, 0.0], 1)) == [0.5]
-
-
-def test_channel_weights_repeats_across_more_channels(backend_module):
-    assert list(backend_module.channel_weights([1.0, 0.5], 4)) == [1.0, 0.5, 1.0, 0.5]
+@pytest.mark.parametrize(
+    "pair,channels,expected",
+    [
+        (None, 2, [1.0, 1.0]),
+        ([1.0, 0.25], 2, [1.0, 0.25]),
+        # A mono file has no sides, so panning must not silence it
+        ([1.0, 0.0], 1, [0.5]),
+        ([1.0, 0.5], 4, [1.0, 0.5, 1.0, 0.5]),
+    ],
+    ids=["no gains", "stereo pair", "collapsed to mono", "repeated across four"],
+)
+def test_channel_weights(backend_module, pair, channels, expected):
+    assert list(backend_module.channel_weights(pair, channels)) == expected
 
 
 def test_spatial_gains_are_applied_per_channel(backend, tmp_path, fake_streams):
@@ -404,35 +415,33 @@ def test_no_delay_means_no_padding(backend, tmp_path, fake_streams):
     assert len(as_samples(fake_streams[0])) == frames
 
 
-def test_sink_kind_trusts_the_form_factor(backend_module):
-    assert backend_module.sink_kind({"device.form_factor": "headset"}) == "headset"
-    assert backend_module.sink_kind({"device.form_factor": "headphone"}) == "headset"
-    assert backend_module.sink_kind({"device.form_factor": "speaker"}) == "speaker"
-    assert backend_module.sink_kind({"device.form_factor": "internal"}) == "speaker"
+ANALOG_CARD = {"device.icon_name": "audio-card-analog-pci"}
 
-
-def test_sink_kind_falls_back_to_the_active_port(backend_module):
+# proplist, active port, expected kind: form factor first, then the port, then the icon
+SINK_KIND_CASES = [
+    ("form factor headset", {"device.form_factor": "headset"}, "", "headset"),
+    ("form factor headphone", {"device.form_factor": "headphone"}, "", "headset"),
+    ("form factor speaker", {"device.form_factor": "speaker"}, "", "speaker"),
+    ("form factor internal", {"device.form_factor": "internal"}, "", "speaker"),
     # An internal card exposes headphones as a port, not as its own sink
-    props = {"device.icon_name": "audio-card-analog-pci"}
-    assert backend_module.sink_kind(props, "analog-output-headphones") == "headset"
-    assert backend_module.sink_kind(props, "analog-output-speaker") == "speaker"
-
-
-def test_sink_kind_falls_back_to_the_icon(backend_module):
-    assert backend_module.sink_kind({"device.icon_name": "audio-headphones"}) == "headset"
-    assert backend_module.sink_kind({"device.icon_name": "audio-speakers"}) == "speaker"
-
-
-def test_sink_kind_defaults_to_speaker(backend_module):
+    ("port headphones", ANALOG_CARD, "analog-output-headphones", "headset"),
+    ("port speaker", ANALOG_CARD, "analog-output-speaker", "speaker"),
+    ("icon headphones", {"device.icon_name": "audio-headphones"}, "", "headset"),
+    ("icon speakers", {"device.icon_name": "audio-speakers"}, "", "speaker"),
     # The analog card on this machine reports no form factor at all
-    assert backend_module.sink_kind({}) == "speaker"
-    assert backend_module.sink_kind({"device.form_factor": None}, "") == "speaker"
+    ("nothing to go on", {}, "", "speaker"),
+    ("empty form factor", {"device.form_factor": None}, "", "speaker"),
+]
 
 
-def write_mono(path, seconds=0.1, value=9000):
-    frames = int(RATE * seconds)
-    sf.write(str(path), np.full((frames, 1), value, dtype=np.int16), RATE, subtype="PCM_16")
-    return frames
+@pytest.mark.parametrize(
+    "props,port,expected",
+    [case[1:] for case in SINK_KIND_CASES],
+    ids=[case[0] for case in SINK_KIND_CASES],
+)
+def test_sink_kind(backend_module, props, port, expected):
+    assert backend_module.sink_kind(props, port) == expected
+
 
 
 def test_mono_is_upmixed_so_spatial_can_pan_it(backend, tmp_path, fake_streams):
@@ -622,14 +631,6 @@ def test_unknown_tags_are_harmless(backend):
     assert backend.stop_tag("nothing-here") == 0
     assert backend.is_playing("nothing-here") is False
 
-
-def wait_until(predicate, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.01)
-    return False
 
 
 def test_playback_state_reports_the_three_states(backend, tmp_path, fake_streams):

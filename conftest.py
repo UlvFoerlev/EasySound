@@ -37,3 +37,17 @@ def source_files() -> list[Path]:
         return not any(part.startswith(".") for part in parts) and "tests" not in parts
 
     return sorted(p for p in REPO_ROOT.rglob("*.py") if is_source(p))
+
+
+def calls_named(tree: ast.AST, name: str) -> list[ast.Call]:
+    """Every `name(...)` and `x.name(...)` call in the tree, for the modules asserted against the AST."""
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and name in {getattr(node.func, "id", None), getattr(node.func, "attr", None)}
+    ]
+
+
+def call_kwargs(call: ast.Call) -> dict:
+    return {keyword.arg: keyword.value for keyword in call.keywords}

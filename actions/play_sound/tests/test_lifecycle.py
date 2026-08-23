@@ -2,7 +2,7 @@ import ast
 
 import pytest
 
-from conftest import REPO_ROOT
+from conftest import REPO_ROOT, calls_named
 
 SOURCE = REPO_ROOT / "actions" / "play_sound" / "play_sound.py"
 
@@ -63,24 +63,16 @@ def test_page_deletion_is_subscribed_to(action):
 
 def test_every_playback_is_tagged_in_one_place(action):
     """The tag is what survives action recreation; a call site setting its own could miss one."""
-    play = method(action, "_play")
     defaults = [
         call
-        for call in ast.walk(play)
-        if isinstance(call, ast.Call)
-        and isinstance(call.func, ast.Attribute)
-        and call.func.attr == "setdefault"
-        and call.args
-        and getattr(call.args[0], "value", None) == "tag"
+        for call in calls_named(method(action, "_play"), "setdefault")
+        if call.args and getattr(call.args[0], "value", None) == "tag"
     ]
     assert len(defaults) == 1
 
     tagged_by_hand = [
         keyword.arg
-        for call in ast.walk(action)
-        if isinstance(call, ast.Call)
-        and isinstance(call.func, ast.Attribute)
-        and call.func.attr == "_play"
+        for call in calls_named(action, "_play")
         for keyword in call.keywords
         if keyword.arg == "tag"
     ]

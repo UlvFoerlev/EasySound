@@ -1,4 +1,13 @@
+import pytest
+
 from actions.audio_targets import (
+    ICON_ALL,
+    ICON_BLUETOOTH,
+    ICON_CUSTOM,
+    ICON_DEFAULT,
+    ICON_GROUP,
+    ICON_HEADSET,
+    ICON_SPEAKER,
     Target,
     find_group,
     format_group_target,
@@ -6,6 +15,8 @@ from actions.audio_targets import (
     missing_sinks,
     normalize_groups,
     resolve_target,
+    sink_icon,
+    target_icon,
 )
 
 SINK_A = "alsa_output.pci-0000_64_00.6.analog-stereo"
@@ -13,50 +24,37 @@ SINK_B = "bluez_output.AC_12_2F_98_71_0B.1"
 GROUPS = [{"id": "g1", "name": "Living room", "sinks": [SINK_A, SINK_B]}]
 
 
-def test_default_means_let_the_server_choose():
-    assert resolve_target(Target.DEFAULT, [SINK_A]) is None
-
-
-def test_empty_target_falls_back_to_default():
-    assert resolve_target("", [SINK_A]) is None
-
-
-def test_custom_never_plays_to_a_device():
+# target, sinks present right now, groups, expected resolution
+RESOLVE_CASES = [
+    ("default", Target.DEFAULT, [SINK_A], None, None),
+    ("empty", "", [SINK_A], None, None),
     # "Custom..." only opens the editor, so it must behave as default rather than as a target
-    assert resolve_target(Target.CUSTOM, [SINK_A]) is None
-
-
-def test_all_uses_every_present_sink():
-    assert resolve_target(Target.ALL, [SINK_A, SINK_B]) == [SINK_A, SINK_B]
-
-
-def test_single_sink_target():
-    assert resolve_target(format_sink_target(SINK_A), [SINK_A, SINK_B]) == [SINK_A]
-
-
-def test_absent_sink_resolves_to_nothing():
-    assert resolve_target(format_sink_target(SINK_B), [SINK_A]) == []
-
-
-def test_group_uses_only_present_members():
+    ("custom", Target.CUSTOM, [SINK_A], None, None),
+    ("unknown shape", "nonsense", [SINK_A], None, None),
+    ("all", Target.ALL, [SINK_A, SINK_B], None, [SINK_A, SINK_B]),
+    ("one sink", format_sink_target(SINK_A), [SINK_A, SINK_B], None, [SINK_A]),
+    ("absent sink", format_sink_target(SINK_B), [SINK_A], None, []),
     # Losing one speaker must not take the whole group down
-    assert resolve_target(format_group_target("g1"), [SINK_A], GROUPS) == [SINK_A]
+    ("group missing a member", format_group_target("g1"), [SINK_A], GROUPS, [SINK_A]),
+    ("group with none present", format_group_target("g1"), [], GROUPS, []),
+    ("group keeps its order", format_group_target("g1"), [SINK_B, SINK_A], GROUPS, [SINK_A, SINK_B]),
+    ("deleted group", format_group_target("gone"), [SINK_A], GROUPS, []),
+]
 
 
-def test_group_with_no_present_members():
-    assert resolve_target(format_group_target("g1"), [], GROUPS) == []
+@pytest.mark.parametrize(
+    "target,present,groups,expected",
+    [case[1:] for case in RESOLVE_CASES],
+    ids=[case[0] for case in RESOLVE_CASES],
+)
+def test_resolve_target(target, present, groups, expected):
+    resolved = resolve_target(target, present, groups)
 
-
-def test_group_preserves_member_order():
-    assert resolve_target(format_group_target("g1"), [SINK_B, SINK_A], GROUPS) == [SINK_A, SINK_B]
-
-
-def test_deleted_group_resolves_to_nothing():
-    assert resolve_target(format_group_target("gone"), [SINK_A], GROUPS) == []
-
-
-def test_unknown_target_shape_falls_back_to_default():
-    assert resolve_target("nonsense", [SINK_A]) is None
+    # None and [] are different answers: one lets the server choose, the other plays nowhere
+    if expected is None:
+        assert resolved is None
+    else:
+        assert resolved == expected
 
 
 def test_missing_sinks_reports_absent_members():
@@ -160,35 +158,34 @@ def test_target_value_handles_missing_and_odd_values():
     assert target_value(7) == ""
 
 
-def test_sink_icons_by_device_type():
-    from actions.audio_targets import (
-        ICON_BLUETOOTH,
-        ICON_HEADSET,
-        ICON_SPEAKER,
-        sink_icon,
-    )
+@pytest.mark.parametrize(
+    "kind,bluetooth,expected",
+    [
+        ("speaker", False, ICON_SPEAKER),
+        ("speaker", True, ICON_BLUETOOTH),
+        ("headset", False, ICON_HEADSET),
+        # A wireless headset is a headset first: that is the more useful thing to show
+        ("headset", True, ICON_HEADSET),
+    ],
+)
+def test_sink_icons_by_device_type(kind, bluetooth, expected):
+    assert sink_icon(kind, bluetooth) == expected
 
-    assert sink_icon("speaker", False) == ICON_SPEAKER
-    assert sink_icon("speaker", True) == ICON_BLUETOOTH
-    assert sink_icon("headset", False) == ICON_HEADSET
-    # A wireless headset is a headset first: that is the more useful thing to show
-    assert sink_icon("headset", True) == ICON_HEADSET
+
+def test_sink_icon_defaults_without_a_known_device():
     assert sink_icon() == ICON_SPEAKER
 
 
-def test_target_icons():
-    from actions.audio_targets import (
-        ICON_ALL,
-        ICON_CUSTOM,
-        ICON_DEFAULT,
-        ICON_GROUP,
-        ICON_SPEAKER,
-        target_icon,
-    )
-
-    assert target_icon(Target.DEFAULT) == ICON_DEFAULT
-    assert target_icon("") == ICON_DEFAULT
-    assert target_icon(Target.ALL) == ICON_ALL
-    assert target_icon(Target.CUSTOM) == ICON_CUSTOM
-    assert target_icon(format_group_target("g1")) == ICON_GROUP
-    assert target_icon(format_sink_target(SINK_A)) == ICON_SPEAKER
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        (Target.DEFAULT, ICON_DEFAULT),
+        ("", ICON_DEFAULT),
+        (Target.ALL, ICON_ALL),
+        (Target.CUSTOM, ICON_CUSTOM),
+        (format_group_target("g1"), ICON_GROUP),
+        (format_sink_target(SINK_A), ICON_SPEAKER),
+    ],
+)
+def test_target_icons(target, expected):
+    assert target_icon(target) == expected

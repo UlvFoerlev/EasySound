@@ -2,26 +2,14 @@ import ast
 
 import pytest
 
+from conftest import call_kwargs, calls_named
+
 LEGACY_ID = "dev_core477_EasySound::PlaySound"
-
-
-def _action_holder_calls(main_ast: ast.Module) -> list[ast.Call]:
-    return [
-        node
-        for node in ast.walk(main_ast)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "ActionHolder"
-    ]
-
-
-def _kwargs(call: ast.Call) -> dict:
-    return {kw.arg: kw.value for kw in call.keywords}
 
 
 @pytest.fixture(scope="module")
 def holder_calls(main_ast):
-    calls = _action_holder_calls(main_ast)
+    calls = calls_named(main_ast, "ActionHolder")
     assert calls, "no ActionHolder(...) calls found in main.py"
     return calls
 
@@ -46,7 +34,7 @@ def test_the_actions_use_derived_ids_only(holder_calls):
     suffixes, pinned = [], []
 
     for call in holder_calls:
-        kwargs = _kwargs(call)
+        kwargs = call_kwargs(call)
         if "action_id_suffix" in kwargs:
             suffixes.append(kwargs["action_id_suffix"].value)
         if "action_id" in kwargs:
@@ -58,16 +46,10 @@ def test_the_actions_use_derived_ids_only(holder_calls):
 
 def test_the_actions_are_grouped_in_a_fixed_order(main_ast):
     """The chooser iterates loose holders as a set, so only a group keeps Stop All below Play Sound."""
-    groups = [
-        node
-        for node in ast.walk(main_ast)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "ActionHolderGroup"
-    ]
+    groups = calls_named(main_ast, "ActionHolderGroup")
     assert len(groups) == 1
 
-    holders = {kw.arg: kw.value for kw in groups[0].keywords}["action_holders"]
+    holders = call_kwargs(groups[0])["action_holders"]
     assert isinstance(holders, ast.List)
     assert [element.attr for element in holders.elts] == [
         "action_play_sound",
@@ -77,14 +59,14 @@ def test_the_actions_are_grouped_in_a_fixed_order(main_ast):
 
 def test_holders_use_action_core_not_the_deprecated_action_base(holder_calls):
     for call in holder_calls:
-        kwargs = _kwargs(call)
+        kwargs = call_kwargs(call)
         assert "action_core" in kwargs
         assert "action_base" not in kwargs
 
 
 def test_key_input_is_declared_supported(holder_calls):
     for call in holder_calls:
-        support = _kwargs(call)["action_support"]
+        support = call_kwargs(call)["action_support"]
         # Omitting action_support defaults every input to UNTESTED, which warns users on a working action
         assert isinstance(support, ast.Name)
         assert support.id == "action_support"
@@ -105,13 +87,9 @@ def test_every_holder_is_actually_registered(main_ast):
     ]
 
     registered = [
-        node.args[0].attr
-        for node in ast.walk(main_ast)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "add_action_holder"
-        and node.args
-        and isinstance(node.args[0], ast.Attribute)
+        call.args[0].attr
+        for call in calls_named(main_ast, "add_action_holder")
+        if call.args and isinstance(call.args[0], ast.Attribute)
     ]
 
     assert constructed, "no ActionHolder assignments found"

@@ -1,8 +1,14 @@
 import math
 
+import pytest
+
 from actions.spatial import (
+    DEFAULT_ROOM_SIZE,
+    MAX_ROOM_SIZE,
+    MIN_ROOM_SIZE,
     channel_gains,
     clamp_position,
+    clamp_room_size,
     clamp_unit,
     dbap_gains,
     default_layout,
@@ -16,21 +22,33 @@ LEFT = (-0.8, 0.0)
 RIGHT = (0.8, 0.0)
 
 
-def test_clamp_unit_bounds_and_rejects_junk():
-    assert clamp_unit(0.5) == 0.5
-    assert clamp_unit(9) == 1.0
-    assert clamp_unit(-9) == -1.0
-    assert clamp_unit("nope") == 0.0
-    assert clamp_unit(None) == 0.0
-    assert clamp_unit(float("nan")) == 0.0
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (0.5, 0.5),
+        (9, 1.0),
+        (-9, -1.0),
+        ("nope", 0.0),
+        (None, 0.0),
+        (float("nan"), 0.0),
+    ],
+)
+def test_clamp_unit_bounds_and_rejects_junk(value, expected):
+    assert clamp_unit(value) == expected
 
 
-def test_clamp_position_shapes():
-    assert clamp_position([0.2, -0.4]) == (0.2, -0.4)
-    assert clamp_position((5, -5)) == (1.0, -1.0)
-    assert clamp_position(None) == (0.0, 0.0)
-    assert clamp_position([1]) == (0.0, 0.0)
-    assert clamp_position("x") == (0.0, 0.0)
+@pytest.mark.parametrize(
+    "position,expected",
+    [
+        ([0.2, -0.4], (0.2, -0.4)),
+        ((5, -5), (1.0, -1.0)),
+        (None, (0.0, 0.0)),
+        ([1], (0.0, 0.0)),
+        ("x", (0.0, 0.0)),
+    ],
+)
+def test_clamp_position_shapes(position, expected):
+    assert clamp_position(position) == expected
 
 
 def test_normalize_positions_drops_malformed():
@@ -75,17 +93,21 @@ def test_equidistant_speakers_share_the_sound():
     assert math.isclose(gains["left"], gains["right"])
 
 
-def test_power_is_constant_wherever_the_source_sits():
+@pytest.mark.parametrize(
+    "source", [FRONT, BACK, LEFT, RIGHT, (0.0, 0.0), (0.5, -0.3)]
+)
+def test_power_is_constant_wherever_the_source_sits(source):
     positions = {"a": FRONT, "b": BACK, "c": LEFT, "d": RIGHT}
-    for source in (FRONT, BACK, LEFT, RIGHT, (0.0, 0.0), (0.5, -0.3)):
-        power = sum(gain * gain for gain in dbap_gains(source, positions).values())
-        assert math.isclose(power, 1.0, abs_tol=1e-6)
+    power = sum(gain * gain for gain in dbap_gains(source, positions).values())
+
+    assert math.isclose(power, 1.0, abs_tol=1e-6)
 
 
-def test_no_gain_exceeds_unity():
+@pytest.mark.parametrize("source", [FRONT, BACK, LEFT, (1.0, 1.0), (-1.0, -1.0)])
+def test_no_gain_exceeds_unity(source):
     positions = {"a": FRONT, "b": BACK, "c": LEFT}
-    for source in (FRONT, BACK, LEFT, (1.0, 1.0), (-1.0, -1.0)):
-        assert all(0.0 <= g <= 1.0 for g in dbap_gains(source, positions).values())
+
+    assert all(0.0 <= g <= 1.0 for g in dbap_gains(source, positions).values())
 
 
 def test_a_single_speaker_plays_at_full_gain():
@@ -139,15 +161,19 @@ def test_channel_gains_ignores_unknown_sinks_in_positions():
     assert set(gains) == {"a"}
 
 
-def test_room_size_is_clamped_and_defaults_safely():
-    from actions.spatial import DEFAULT_ROOM_SIZE, MAX_ROOM_SIZE, MIN_ROOM_SIZE, clamp_room_size
-
-    assert clamp_room_size(6.0) == 6.0
-    assert clamp_room_size(0.1) == MIN_ROOM_SIZE
-    assert clamp_room_size(500) == MAX_ROOM_SIZE
-    assert clamp_room_size("nope") == DEFAULT_ROOM_SIZE
-    assert clamp_room_size(None) == DEFAULT_ROOM_SIZE
-    assert clamp_room_size(float("nan")) == DEFAULT_ROOM_SIZE
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (6.0, 6.0),
+        (0.1, MIN_ROOM_SIZE),
+        (500, MAX_ROOM_SIZE),
+        ("nope", DEFAULT_ROOM_SIZE),
+        (None, DEFAULT_ROOM_SIZE),
+        (float("nan"), DEFAULT_ROOM_SIZE),
+    ],
+)
+def test_room_size_is_clamped_and_defaults_safely(value, expected):
+    assert clamp_room_size(value) == expected
 
 
 def test_the_map_spans_the_full_room_width():

@@ -1,5 +1,7 @@
 import random
 
+import pytest
+
 from actions.playlist import (
     MAX_RATE_VARIATION,
     ORDER_LOCALES,
@@ -97,13 +99,19 @@ def test_random_stays_inside_the_pool():
     assert all(picker.pick([A, B], Order.RANDOM) in (A, B) for _ in range(20))
 
 
-def test_variation_is_clamped_and_junk_safe():
-    assert clamp_variation(10) == 10.0
-    assert clamp_variation(-5) == 0.0
-    assert clamp_variation(999) == MAX_RATE_VARIATION
-    assert clamp_variation("nope") == 0.0
-    assert clamp_variation(None) == 0.0
-    assert clamp_variation(float("nan")) == 0.0
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (10, 10.0),
+        (-5, 0.0),
+        (999, MAX_RATE_VARIATION),
+        ("nope", 0.0),
+        (None, 0.0),
+        (float("nan"), 0.0),
+    ],
+)
+def test_variation_is_clamped_and_junk_safe(value, expected):
+    assert clamp_variation(value) == expected
 
 
 def test_no_variation_means_untouched_playback():

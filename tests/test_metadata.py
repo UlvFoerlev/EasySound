@@ -2,16 +2,15 @@ import ast
 
 import pytest
 
+from conftest import call_kwargs, calls_named
+
 
 def _register_kwargs(main_ast: ast.Module) -> dict:
-    for node in ast.walk(main_ast):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "register"
-        ):
-            return {kw.arg: kw.value for kw in node.keywords}
-    pytest.fail("no self.register(...) call found in main.py")
+    calls = calls_named(main_ast, "register")
+    if not calls:
+        pytest.fail("no self.register(...) call found in main.py")
+
+    return call_kwargs(calls[0])
 
 
 def test_manifest_and_plugin_version_agree(manifest, main_ast):
