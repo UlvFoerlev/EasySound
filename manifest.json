@@ -1,10 +1,13 @@
 {
     "version": "2.0.0",
+    "app-version": "1.5.0-beta.15",
+    "minimum-app-version": "1.5.0-beta.15",
     "thumbnail": "store/Thumbnail.png",
     "id": "uf_easy_sound",
+    "github": "https://github.com/UlvFoerlev/EasySound",
     "name": "EasySound",
     "descriptions": {
-        "en_US": "Play audio files from your local machine, on any speaker or group of speakers, with optional spatial positioning. Requires PulseAudio or PipeWire."
+        "en_US": "Play audio files from your local machine, on any speaker or group of speakers, with optional spatial positioning."
     },
     "short-descriptions": {
         "en_US": "Play audio files on any speaker."

@@ -36,3 +36,30 @@ def test_manifest_identity_fields(manifest):
     assert manifest["id"] == "uf_easy_sound"
     assert manifest["name"]
     assert manifest["descriptions"]["en_US"]
+
+
+def test_manifest_declares_the_store_fields(manifest):
+    # The plugin template documents these, and the store carries them into its listing
+    assert manifest["github"] == "https://github.com/UlvFoerlev/EasySound"
+    assert manifest["app-version"]
+    assert manifest["minimum-app-version"]
+
+
+def test_manifest_app_version_matches_register(manifest, main_ast):
+    """The floor StreamController enforces comes from register(); the manifest must not contradict it."""
+    declared = _register_kwargs(main_ast)["app_version"]
+
+    assert isinstance(declared, ast.Constant)
+    assert manifest["app-version"] == declared.value
+    assert manifest["minimum-app-version"] == declared.value
+
+
+def test_about_json_names_both_copyright_holders(repo_root):
+    import json
+
+    about = json.loads((repo_root / "about.json").read_text())
+
+    assert about["author"]
+    assert "Core447" in about["copyright"]
+    assert "UlvFoerlev" in about["copyright"]
+    assert about["support"].startswith("https://")
