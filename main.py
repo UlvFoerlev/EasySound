@@ -11,8 +11,9 @@ from pathlib import Path
 import gi
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import GdkPixbuf, Gtk
+from gi.repository import Adw, GdkPixbuf, Gtk
 from loguru import logger
 
 import globals as gl
@@ -27,8 +28,17 @@ from .actions.stop_all.stop_all import StopAllAction
 # v1 typo'd Core447's own prefix (dev_core477 vs dev_core447); kept only so pages can be migrated off it
 LEGACY_PLAY_SOUND_ACTION_ID = "dev_core477_EasySound::PlaySound"
 
-LOGO_PATH = Path(__file__).parent / "assets" / "logo.png"
+ASSETS = Path(__file__).parent / "assets"
+# The wordmark is monochrome, so it needs an inverted copy or it vanishes on a light theme
+LOGO_ON_DARK = ASSETS / "logo.png"
+LOGO_ON_LIGHT = ASSETS / "logo-light.png"
 LOGO_SOURCE_HEIGHT = 64
+
+
+def logo_path() -> Path:
+    dark = Adw.StyleManager.get_default().get_dark()
+
+    return LOGO_ON_DARK if dark else LOGO_ON_LIGHT
 
 
 def logo_image() -> Gtk.Image:
@@ -36,7 +46,9 @@ def logo_image() -> Gtk.Image:
     # No size request on purpose: every other plugin's prefix measures 16x16, and a wider one indents
     # both the icon and the title out of line with the rest of the list. The source is loaded larger
     # than the icon box so it stays sharp when GTK scales it down.
-    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(LOGO_PATH), -1, LOGO_SOURCE_HEIGHT, True)
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+        str(logo_path()), -1, LOGO_SOURCE_HEIGHT, True
+    )
 
     return Gtk.Image.new_from_pixbuf(pixbuf)
 

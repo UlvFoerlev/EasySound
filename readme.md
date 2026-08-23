@@ -4,6 +4,9 @@
 EasySound is a plugin for StreamController that lets the user play audio files through their Stream Deck.
 https://github.com/StreamController/StreamController
 
+It provides two actions: **Play Sound**, which covers most needs on its own, and **Stop All Sounds**.
+Combining several "Play Sound" actions should cover most advanced needs.
+
 ## Updating from v1
 
 Update, then restart StreamController once. On that first start EasySound rewrites your saved pages:
@@ -28,20 +31,38 @@ model. On a system running bare ALSA with no sound server, sounds will not play:
 says so, and StreamController's log records a warning at startup.
 
 ## Play Sound
-EasySound only have on action "Play Sound", this should cover most of the users needs. Combining multiple "Play Sound" actions should cover most advanced needs. 
-The Actions have the following settings:
 
-### Sound File
-The path to the audio file. Use browse to open a file dialog.
+### Sounds
+
+A key can hold any number of sounds. Open the **Sounds** section, press **Browse**, and select one or
+several files at once — hold ctrl or shift in the file dialog to pick more than one. Each sound gets a
+row with a delete button, and a sound whose file has since moved or been deleted is marked with a
+warning icon.
+
+Sounds are decoded once and cached, and every sound on a page is prepared when the page loads, so the
+first press is no slower than the rest. Replacing a file on disk is noticed automatically.
+
+### Play Order
+
+Appears once a key has two or more sounds:
+
+- **Random** — a fresh pick every press, repeats included.
+- **In order** — steps through the list and wraps around.
+- **Shuffle (no repeats)** — plays every sound once before any repeats, and avoids playing the same
+  sound twice in a row across that boundary.
+
+The position in the list is remembered while StreamController runs; it is not saved between restarts.
 
 ### Volume
-Set the volume of the played sound.
 
-### Buttom Mode
-There is several ways to play sounds:
+Sets the playback volume for this key, from 0 to 100.
+
+### Button Mode
+
+There are several ways to play sounds:
 
 #### Press
-The most common option. The audio is press when the key is pressed.
+The most common option. The audio plays when the key is pressed.
 
 #### Release
 Play the audio file on key release.
@@ -49,14 +70,76 @@ Play the audio file on key release.
 #### Hold
 The sound will loop as long as the key is held down, and end once it is released.
 
-#### Turned On / Turned Off
-The key will act as a on/off bottom. The audio is played on the relevant state.
+#### Turn On / Turn Off
+The key will act as an on/off button. The audio is played on the relevant state.
 
 #### Play until Turned Off
-The sound will be played on "Turned On" and stop on "Turned Off", see above.
+The sound starts on the first press and loops until pressed again.
 
-### Fade In
-The sound will fade in from zero volume. Set duration in seconds.
+This mode adds one option, **Keep playing on other pages**:
 
-### Fade Out
-The sound will fade out to zero volume. Set duration in seconds. A one-shot sound fades out over its last 'n' seconds; a looping sound ("Hold" or "Play until Turned Off") keeps playing for 'n' seconds after it is stopped.
+- **Off** (default) — the sound stops when you leave the page. Right for a klaxon that belongs to one
+  scene.
+- **On** — it plays until you turn it off, whichever page you are on. Right for an ambient bed or a
+  background playlist.
+
+Either way the loop stays under the control of the key that started it, even after switching pages and
+coming back, so pressing again always stops it rather than starting a second copy.
+
+### Fades
+
+**Fade In** starts the sound from silence over 'n' seconds. **Fade Out** takes it back to silence over
+'n' seconds: a one-shot fades over its last 'n' seconds, while a looping sound ("Hold" or "Play until
+Turned Off") keeps playing for 'n' seconds after it is stopped.
+
+### Advanced
+
+#### Speakers
+
+By default a sound plays on whatever output your system is using. The dropdown also offers:
+
+- **All** — every speaker detected right now.
+- **Any single speaker** — picked from the connected devices.
+- **A speaker group** — see below.
+- **Custom…** — opens the group editor.
+
+Devices are looked up when the key is pressed, so nothing is pinned to a speaker that has since gone
+away, and headsets, wired speakers and Bluetooth devices are each shown with their own icon.
+
+#### Speaker Groups
+
+A group is any number of speakers under a name you choose. Groups are shared: every action on every page
+picks from the same list, because a group describes your room rather than one button.
+
+Losing a speaker does not break a group. The sound plays on whichever members are connected at that
+moment, and the missing ones are named under the dropdown. If none of them are available, the key
+reports an error instead of playing silently.
+
+#### Pitch and speed variation
+
+Shifts each press by up to the given percentage, so a sound that fires repeatedly does not sound
+identical every time. Pitch and speed move together, as they would on a tape played faster.
+
+#### Spatial sound
+
+Simulates a direction for a sound. Enable it, then open the map: you sit in the centre, your speakers
+are around you, and an orange dot marks where the sound comes from. Drag the dot to place the sound, and
+drag the speakers to match where they actually stand in your room. Each speaker's brightness shows how
+much of the sound it would carry, so a sound placed behind you is carried mostly by the speakers behind
+you.
+
+A headset appears as two dots, one per ear, which you can move apart to widen the stereo image. Front
+and back cannot be simulated on a headset — that needs head-tracking-style processing this plugin does
+not do — but left and right work.
+
+**Distance delay** is optional and off by default. Turn it on, set how wide your room is, and each
+speaker is delayed by the time sound actually takes to travel, which strengthens the sense of direction.
+The map then draws the distance to each speaker. This works best with two or more similar speakers:
+Bluetooth devices add their own delay of 100 ms or more that cannot be measured or compensated, so
+mixing wired and wireless speakers will not line up.
+
+## Stop All Sounds
+
+Stops everything EasySound is playing, from any action on any page. Useful as a panic button when
+several loops are running. It has its own **Fade Out**, so everything can be taken down gently instead
+of cut off.
