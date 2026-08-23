@@ -60,7 +60,6 @@ class PlaySoundAction(SoundActionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.looping_handle = None
         self.active = False
         self.warmed_paths: set[str] = set()
         # Rotation and shuffle state is per action and deliberately not persisted
@@ -68,6 +67,8 @@ class PlaySoundAction(SoundActionBase):
 
         # A loop is stopped when its page is left, unless the action opts out of that
         self.connect(signal=Signals.ChangePage, callback=self.on_page_changed)
+        # Deleting the page takes its sounds with it, whatever the keep-playing flag says
+        self.connect(signal=Signals.PageDelete, callback=self.on_page_deleted)
 
         # Dial DOWN/UP are kept so dial presses behave as they did under ActionBase's legacy dispatch
         self.add_event_assigner(
@@ -734,8 +735,8 @@ class PlaySoundAction(SoundActionBase):
         )
         self.group_dialog.present(self.speakers_row.widget)
 
-    def loop_tag(self) -> str:
-        """Stable across action recreation, so a returning action can still stop its own loop."""
+    def action_tag(self) -> str:
+        """Names every sound this action starts, and survives the action being recreated."""
         page = getattr(self.page, "json_path", "") or ""
         ident = getattr(self.input_ident, "json_identifier", "") or ""
 
@@ -747,7 +748,7 @@ class PlaySoundAction(SoundActionBase):
             return "stopped"
 
         try:
-            return str(backend.playback_state(self.loop_tag()))
+            return str(backend.playback_state(self.action_tag()))
         except Exception:  # rpyc reraises backend and connection faults as arbitrary types
             return "stopped"
 
@@ -757,23 +758,52 @@ class PlaySoundAction(SoundActionBase):
             return
 
         try:
-            backend.pause_tag(self.loop_tag(), paused)
+            backend.pause_tag(self.action_tag(), paused)
         except Exception:
             pass
 
-    def stop_loop(self, fade_out: float = 0.0) -> None:
+    def stop_sounds(self, fade_out: float = 0.0) -> None:
+        """Stops every sound this action started; a long one-shot outlives the action just as a loop does."""
         backend = getattr(self.plugin_base, "backend", None)
-        self.looping_handle = None
-
         if backend is None:
             return
 
         try:
-            backend.stop_tag(self.loop_tag(), fade_out)
+            backend.stop_tag(self.action_tag(), fade_out)
         except Exception:
             pass
 
+    def on_remove(self) -> None:
+        # Nothing can reach these sounds once the action is gone, so none of them may outlive it
+        self.stop_sounds()
+
+    def on_removed_from_cache(self) -> None:
+        # Clearing a key drops its actions without ever calling on_remove, and plain cache eviction
+        # looks identical from here; the saved page is what tells them apart
+        if not self.input_still_saved():
+            self.stop_sounds()
+
+        # Last, so a failure in the base teardown cannot leave the sound running
+        super().on_removed_from_cache()
+
+    def input_still_saved(self) -> bool:
+        # An unreadable page counts as present: cutting a sound off wrongly is worse than a late stop
+        try:
+            inputs = self.page.dict[self.input_ident.input_type]
+
+            return self.input_ident.json_identifier in inputs
+        except Exception:
+            return True
+
+    def on_page_deleted(self, path) -> None:
+        if path == getattr(self.page, "json_path", None):
+            self.stop_sounds()
+
     def on_page_changed(self, controller, old_path, new_path) -> None:
+        # Navigation only cuts off a held-open loop; a one-shot already fired is left to finish
+        if self.mode is not Mode.PLAY_TILL_TURNED_OFF:
+            return
+
         if self.keep_playing_off_page:
             return
 
@@ -783,7 +813,7 @@ class PlaySoundAction(SoundActionBase):
         if new_path == getattr(self.page, "json_path", None):
             return
 
-        self.stop_loop(self.fade_out)
+        self.stop_sounds(self.fade_out)
 
     def _play(self, **kwargs):
         backend = getattr(self.plugin_base, "backend", None)
@@ -796,6 +826,7 @@ class PlaySoundAction(SoundActionBase):
 
         if backend is not None:
             try:
+                kwargs.setdefault("tag", self.action_tag())
                 # Gathered once: a Default target with spatial off touches neither rpyc nor the disk
                 needs_devices = self.spatial_enabled or self.speakers not in (
                     Target.DEFAULT,
@@ -833,7 +864,7 @@ class PlaySoundAction(SoundActionBase):
                 row.widget.set_visible(relevant)
 
     def on_mode_change(self, widget, new_value, old_value):
-        self.stop_looping()
+        self.stop_sounds()
         self.active = False
         self.update_loop_option_visibility()
 
@@ -853,20 +884,17 @@ class PlaySoundAction(SoundActionBase):
                 if not self.active:
                     self._play(fade_in=self.fade_in, fade_out=self.fade_out)
             case Mode.HOLD:
-                self.stop_looping()
-
-                self.looping_handle = self._play(loops=-1, fade_in=self.fade_in)
+                self.stop_sounds()
+                self._play(loops=-1, fade_in=self.fade_in)
 
             case Mode.PLAY_TILL_TURNED_OFF:
                 # Asked of the backend rather than remembered, so it survives recreation and restarts
                 state = self.loop_state()
 
                 if state == "stopped":
-                    self.looping_handle = self._play(
-                        loops=-1, fade_in=self.fade_in, tag=self.loop_tag()
-                    )
+                    self._play(loops=-1, fade_in=self.fade_in)
                 elif not self.pause_instead_of_stop:
-                    self.stop_loop(self.fade_out)
+                    self.stop_sounds(self.fade_out)
                 else:
                     # Pause keeps the position, so the next press resumes where it left off
                     self.pause_loop(state == "playing")
@@ -876,17 +904,4 @@ class PlaySoundAction(SoundActionBase):
             self._play(fade_in=self.fade_in, fade_out=self.fade_out)
 
         elif self.sound_pool() and self.mode == Mode.HOLD:
-            self.stop_looping(fadeout=self.fade_out)
-
-    def stop_looping(self, fadeout: float = 0.0):
-        if self.looping_handle is None:
-            return
-
-        backend = getattr(self.plugin_base, "backend", None)
-        if backend is not None:
-            try:
-                backend.stop(self.looping_handle, fadeout)
-            except Exception:
-                pass
-
-        self.looping_handle = None
+            self.stop_sounds(self.fade_out)

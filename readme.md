@@ -42,6 +42,9 @@ warning icon.
 Sounds are decoded once and cached, and every sound on a page is prepared when the page loads, so the
 first press is no slower than the rest. Replacing a file on disk is noticed automatically.
 
+A sound never outlives the key that started it: deleting the action, clearing its key or deleting its
+page stops whatever it is playing.
+
 ### Play Order
 
 Appears once a key has two or more sounds:

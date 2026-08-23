@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import threading
 import time
 import types
 
@@ -719,3 +720,60 @@ def test_pausing_an_unknown_tag_is_harmless(backend):
     assert backend.pause_tag("nothing") == 0
     assert backend.playback_state("nothing") == "stopped"
     assert backend.pause_tag("") == 0
+
+
+@pytest.fixture
+def held_streams(backend, monkeypatch):
+    """Blocks the writers inside write(), so a one-shot stays alive long enough to be counted."""
+    release = threading.Event()
+    created = []
+
+    class HeldStream(FakeStream):
+        def write(self, data):
+            release.wait(timeout=5)
+            super().write(data)
+
+    def _open(sink, rate, channels):
+        stream = HeldStream()
+        stream.sink = sink
+        created.append(stream)
+        return stream
+
+    monkeypatch.setattr(backend, "_open_stream", _open)
+    yield release
+
+    release.set()
+
+
+def test_one_tag_stops_every_sound_an_action_started(backend, tmp_path, held_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    # An action tags its one-shots too, so a burst of presses stays one thing to stop
+    for _ in range(3):
+        backend.play(str(path), sinks=["a"], tag="key-1x1")
+    backend.play(str(path), sinks=["a"], tag="key-2x2")
+
+    assert wait_until(lambda: len(backend.playbacks) == 4)
+    assert backend.stop_tag("key-1x1") == 3
+    assert backend.playback_state("key-2x2") == "playing"
+
+    held_streams.set()
+    assert wait_until(lambda: backend.playback_state("key-1x1") == "stopped")
+
+    backend.stop_all()
+    assert wait_for_idle(backend)
+
+
+def test_a_removed_action_takes_its_loop_and_its_one_shot_with_it(backend, tmp_path, held_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    backend.play(str(path), sinks=["a"], loops=-1, tag="gone")
+    backend.play(str(path), sinks=["b"], tag="gone")
+
+    assert wait_until(lambda: len(backend.playbacks) == 2)
+    assert backend.stop_tag("gone") == 2
+
+    held_streams.set()
+    assert wait_for_idle(backend)
