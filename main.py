@@ -171,12 +171,22 @@ class PluginEasySound(PluginBase):
 
         if info["available"]:
             logger.info(f"EasySound: audio server ready ({info['name'] or 'unknown'})")
-        else:
-            # The only hard requirement: every output feature is built on PulseAudio's sink model
+            return
+
+        # Told apart deliberately: a half-finished install looks nothing like a missing sound server
+        if getattr(self, "backend", None) is None:
             logger.warning(
-                "EasySound needs PulseAudio or PipeWire, and no sound server answered "
-                f"({info['error']}). Sounds will not play until one is running."
+                "EasySound backend is not running. If the plugin was just installed or updated, "
+                "__install__.py may still be building .venv, or pip may have failed; restarting "
+                "StreamController once it finishes usually fixes this."
             )
+            return
+
+        # The only hard requirement: every output feature is built on PulseAudio's sink model
+        logger.warning(
+            "EasySound needs PulseAudio or PipeWire, and no sound server answered "
+            f"({info['error']}). Sounds will not play until one is running."
+        )
 
     def setup_backend(self):
         # Launch backend

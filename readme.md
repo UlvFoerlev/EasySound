@@ -4,6 +4,18 @@
 EasySound is a plugin for StreamController that lets the user play audio files through their Stream Deck.
 https://github.com/StreamController/StreamController
 
+## Updating from v1
+
+Update, then restart StreamController once. On that first start EasySound rewrites your saved pages:
+old action ids are renamed and each button's single sound becomes a sound list. Every page is backed up
+to `easysound-v1-page-backups` in StreamController's data directory first, and your buttons keep their
+settings.
+
+Two things to know. Give the update a moment before restarting: StreamController installs the new Python
+dependencies in the background, and a backend that starts before they land has no sound until the next
+restart (the log says so explicitly). And migrated pages will not work if you downgrade to v1 again,
+which is what the backups are for.
+
 ## Requirements
 
 Linux with a PulseAudio-compatible sound server, which means **PulseAudio or PipeWire**. PipeWire works
