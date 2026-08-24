@@ -109,6 +109,27 @@ def normalize_positions(raw: Any) -> dict[str, tuple[float, float]]:
     return positions
 
 
+def normalize_headset_overrides(raw: Any) -> dict[str, bool]:
+    # Saved settings are user-editable json, so anything malformed is dropped rather than raising
+    if not isinstance(raw, dict):
+        return {}
+
+    return {name: bool(value) for name, value in raw.items() if isinstance(name, str) and name}
+
+
+def resolve_headsets(detected: Any = None, overrides: Any = None) -> set[str]:
+    """Detection can only guess from device properties, so a choice made in the map overrules it."""
+    headsets = set(detected or ())
+
+    for name, is_headset in normalize_headset_overrides(overrides).items():
+        if is_headset:
+            headsets.add(name)
+        else:
+            headsets.discard(name)
+
+    return headsets
+
+
 def default_layout(sinks: list[str]) -> dict[str, tuple[float, float]]:
     """Speakers with no saved position start evenly spaced on a ring, first one in front."""
     count = len(sinks)

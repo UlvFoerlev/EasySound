@@ -778,3 +778,85 @@ def test_a_removed_action_takes_its_loop_and_its_one_shot_with_it(backend, tmp_p
 
     held_streams.set()
     assert wait_for_idle(backend)
+
+
+def test_play_pool_walks_every_sound_in_sequence(backend, fake_streams, tmp_path):
+    # The bug: a held-open loop replayed one pick forever, so the pool was never advanced
+    paths = []
+    for index, value in enumerate((1000, 2000, 3000)):
+        path = tmp_path / f"tone{index}.wav"
+        write_tone(path, seconds=0.05, value=value)
+        paths.append(str(path))
+
+    handle = backend.play_pool(paths=paths, order="sequence", tag="loop")
+    assert handle is not None
+
+    assert wait_until(lambda: len(fake_streams) >= 3, timeout=10.0)
+    backend.stop(handle)
+    assert wait_for_idle(backend)
+
+    # One stream per sound played, and each carried a different tone
+    values = {int(abs(as_samples(s)).max()) for s in fake_streams[:3] if len(s.payload)}
+    assert len(values) == 3
+
+
+def test_play_pool_keeps_the_tag_playing_between_sounds(backend, fake_streams, tmp_path):
+    paths = []
+    for index in range(2):
+        path = tmp_path / f"short{index}.wav"
+        write_tone(path, seconds=0.03)
+        paths.append(str(path))
+
+    handle = backend.play_pool(paths=paths, order="sequence", tag="held")
+
+    # The supervisor holds a writer, so the on/off state cannot flicker as sounds hand over
+    for _ in range(30):
+        assert backend.playback_state("held") == "playing"
+        time.sleep(0.01)
+
+    backend.stop(handle)
+    assert wait_for_idle(backend)
+    assert backend.playback_state("held") == "stopped"
+
+
+def test_play_pool_of_one_loops_in_place(backend, fake_streams, tmp_path):
+    path = tmp_path / "solo.wav"
+    frames = write_tone(path, seconds=0.05)
+
+    handle = backend.play_pool(paths=[str(path)], order="shuffle", tag="solo")
+    assert handle is not None
+
+    # A single sound must stay seamless, so it loops inside one stream rather than reopening
+    assert wait_until(lambda: fake_streams and len(as_samples(fake_streams[0])) > frames)
+    assert len(fake_streams) == 1
+
+    backend.stop(handle)
+    assert wait_for_idle(backend)
+
+
+def test_play_pool_survives_an_unreadable_sound(backend, fake_streams, tmp_path):
+    good = tmp_path / "good.wav"
+    write_tone(good, seconds=0.05)
+    bad = tmp_path / "bad.wav"
+    bad.write_text("not audio")
+
+    handle = backend.play_pool(paths=[str(bad), str(good)], order="sequence", tag="mixed")
+    assert handle is not None
+
+    assert wait_until(lambda: len(fake_streams) >= 1, timeout=10.0)
+    backend.stop(handle)
+    assert wait_for_idle(backend)
+
+
+def test_play_pool_stops_when_nothing_is_playable(backend, fake_streams, tmp_path):
+    paths = []
+    for index in range(3):
+        path = tmp_path / f"junk{index}.wav"
+        path.write_text("not audio")
+        paths.append(str(path))
+
+    handle = backend.play_pool(paths=paths, order="sequence", tag="junk")
+
+    # Every sound failing must end the loop rather than spin the supervisor
+    assert wait_for_idle(backend)
+    assert backend.playback_state("junk") == "stopped"

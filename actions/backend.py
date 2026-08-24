@@ -9,6 +9,11 @@ import pasimple
 import pulsectl
 import soundfile as sf
 
+try:  # Run as a script the backend's own directory is sys.path[0]; under the tests it is not
+    from playlist import Picker, normalize_order
+except ImportError:
+    from actions.playlist import Picker, normalize_order
+
 CHUNK_FRAMES = 1024
 SINK_CACHE_SECONDS = 2.0
 SAMPLE_WIDTH = 2
@@ -194,10 +199,126 @@ class Backend(BackendBase):
         rate_scale: float = 1.0,
         tag: str = "",
     ) -> str | None:
+        with self.lock:
+            self.handle_counter += 1
+            handle = f"playback-{self.handle_counter}"
+            playback = Playback(tag=tag)
+            self.playbacks[handle] = playback
+
+        threads = self._spawn_sound(
+            handle, playback, path, sinks, volume, loops, fade_in, fade_out,
+            gains, delays, rate_scale,
+        )
+        if not threads:
+            with self.lock:
+                self.playbacks.pop(handle, None)
+            return None
+
+        return handle
+
+    def play_pool(
+        self,
+        paths: list[str],
+        order: str = "random",
+        sinks: list[str] | None = None,
+        volume: float = 100.0,
+        fade_in: float = 0.0,
+        fade_out: float = 0.0,
+        gains: list[list[float]] | None = None,
+        delays: list[float] | None = None,
+        rate_scale: float = 1.0,
+        tag: str = "",
+    ) -> str | None:
+        """Plays sound after sound until stopped, so a held-open loop walks the pool in its order."""
+        pool = [str(path) for path in (paths or []) if path]
+        if not pool:
+            return None
+
+        # One sound can be looped in place, which is seamless where restarting a playback is not
+        if len(pool) == 1:
+            return self.play(
+                path=pool[0], sinks=sinks, volume=volume, loops=-1, fade_in=fade_in,
+                fade_out=fade_out, gains=gains, delays=delays, rate_scale=rate_scale, tag=tag,
+            )
+
+        with self.lock:
+            self.handle_counter += 1
+            handle = f"playback-{self.handle_counter}"
+            playback = Playback(tag=tag)
+            self.playbacks[handle] = playback
+            # The supervisor counts as a writer, so the playback outlives each individual sound
+            playback.writers = 1
+
+        Thread(
+            target=self._supervise,
+            args=(handle, playback, pool, order, sinks, volume, fade_in, gains, delays, rate_scale),
+            daemon=True,
+        ).start()
+
+        return handle
+
+    def _supervise(
+        self, handle, playback, pool, order, sinks, volume, fade_in, gains, delays, rate_scale
+    ) -> None:
+        picker = Picker()
+        order = normalize_order(order)
+        first = True
+        failures = 0
+
+        try:
+            while not playback.stopping:
+                # Checked here too, so a pause between sounds does not start the next one
+                while playback.paused and not playback.stopping:
+                    time.sleep(PAUSE_POLL_SECONDS)
+                if playback.stopping:
+                    break
+
+                path = picker.pick(pool, order)
+                if path is None:
+                    break
+
+                threads = self._spawn_sound(
+                    handle, playback, path, sinks, volume, 0,
+                    # Fades belong to the loop, not to each sound, so only the first one eases in
+                    fade_in if first else 0.0, 0.0,
+                    gains, delays, rate_scale,
+                )
+                if not threads:
+                    # A missing or unreadable sound is skipped, but a pool of them must not spin
+                    failures += 1
+                    if failures >= len(pool):
+                        break
+                    continue
+
+                failures = 0
+                first = False
+                for thread in threads:
+                    thread.join()
+        finally:
+            with self.lock:
+                playback.writers -= 1
+                if playback.writers <= 0:
+                    self.playbacks.pop(handle, None)
+
+    def _spawn_sound(
+        self,
+        handle: str,
+        playback: "Playback",
+        path: str | Path,
+        sinks: list[str] | None,
+        volume: float,
+        loops: int,
+        fade_in: float,
+        fade_out: float,
+        gains: list[list[float]] | None,
+        delays: list[float] | None,
+        rate_scale: float,
+    ) -> list[Thread]:
+        """Opens a stream per target for one sound and returns the writers, so a caller can wait."""
         key = path if isinstance(path, str) else str(path)
 
         if not self.preload_sound(path=key):
-            return None
+            return []
 
         sound = self.cache[key]
         _, rate, channels = sound
@@ -210,7 +331,7 @@ class Backend(BackendBase):
         # None means "whatever the server considers default", which is one stream, not zero
         targets = [None] if sinks is None else list(sinks)
         if not targets:
-            return None
+            return []
 
         # Spatial gains arrive parallel to targets, so a stream that fails to open drops its entry too
         opened = []
@@ -223,19 +344,17 @@ class Backend(BackendBase):
 
         # A partial fan-out still counts as playing: one dead speaker must not fail the whole group
         if not opened:
-            return None
+            return []
 
         gain = max(min(volume / 100.0, 1.0), 0.0)
-        playback = Playback(tag=tag)
 
         with self.lock:
-            self.handle_counter += 1
-            handle = f"playback-{self.handle_counter}"
-            self.playbacks[handle] = playback
-            playback.writers = len(opened)
+            # Added to, never assigned: a supervised pool already holds a writer of its own
+            playback.writers += len(opened)
 
+        threads = []
         for stream, weights, delay in opened:
-            Thread(
+            thread = Thread(
                 target=self._pump,
                 args=(
                     handle,
@@ -252,9 +371,11 @@ class Backend(BackendBase):
                     fade_out,
                 ),
                 daemon=True,
-            ).start()
+            )
+            threads.append(thread)
+            thread.start()
 
-        return handle
+        return threads
 
     def stop(self, handle: str, fade_out: float = 0.0) -> None:
         with self.lock:

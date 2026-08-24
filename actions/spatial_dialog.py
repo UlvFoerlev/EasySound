@@ -45,6 +45,7 @@ class SpatialDialog(Adw.Dialog):
         delay_enabled: bool = False,
         on_room_changed: Callable[[float, bool], None] | None = None,
         headsets: set[str] | None = None,
+        on_headset_changed: Callable[[str, bool], None] | None = None,
     ):
         super().__init__()
 
@@ -61,6 +62,9 @@ class SpatialDialog(Adw.Dialog):
         self.headsets = {sink for sink in (headsets or set()) if sink in self.sinks}
         self.dragging: str | None = None
         self.fg = (1.0, 1.0, 1.0)
+
+        self.on_headset_changed = on_headset_changed
+        self.saved = dict(positions)
 
         self.positions = emitter_layout(self.sinks, self.headsets, positions)
         self.ring_unplaced(positions)
@@ -105,6 +109,17 @@ class SpatialDialog(Adw.Dialog):
         settings_group.add(self.delay_row)
         settings_group.add(self.room_row)
 
+        self.headset_group = Adw.PreferencesGroup(
+            title=self.lm.get("action.play-sound.spatial.headset-group"),
+            description=self.lm.get("action.play-sound.spatial.headset-group-subtitle"),
+        )
+        for sink in self.sinks:
+            row = Adw.SwitchRow(
+                title=self.labels.get(sink, sink), active=sink in self.headsets
+            )
+            row.connect("notify::active", self.on_headset_toggled, sink)
+            self.headset_group.add(row)
+
         content = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=12,
@@ -116,6 +131,8 @@ class SpatialDialog(Adw.Dialog):
         content.append(self.canvas)
         content.append(self.hint_label)
         content.append(settings_group)
+        if self.sinks:
+            content.append(self.headset_group)
         content.append(reset)
 
         view = Adw.ToolbarView()
@@ -129,6 +146,26 @@ class SpatialDialog(Adw.Dialog):
             sink for sink in self.sinks if sink not in self.headsets and sink not in saved
         ]
         self.positions.update(default_layout(unplaced))
+
+    def on_headset_toggled(self, row, _param, sink: str) -> None:
+        is_headset = row.get_active()
+        if is_headset:
+            self.headsets.add(sink)
+        else:
+            self.headsets.discard(sink)
+
+        # A headset is two emitters and a speaker is one, so the map has to be rebuilt around it
+        self.saved.update(self.positions)
+        self.positions = emitter_layout(self.sinks, self.headsets, self.saved)
+        self.ring_unplaced(self.saved)
+        self.dragging = None
+
+        if self.on_headset_changed is not None:
+            self.on_headset_changed(sink, is_headset)
+        self.on_positions_changed(dict(self.positions))
+
+        self.hint_label.set_label(self.lm.get(self.hint_key()))
+        self.canvas.queue_draw()
 
     def hint_key(self) -> str:
         if not self.sinks:

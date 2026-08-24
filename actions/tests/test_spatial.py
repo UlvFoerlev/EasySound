@@ -334,3 +334,29 @@ def test_merging_clamps_and_survives_junk():
     assert merge_positions(None, {"a": (9, -9)}) == {"a": (1.0, -1.0)}
     assert merge_positions({"a": "junk"}, {}) == {"a": (0.0, 0.0)}
     assert merge_positions({"a": [0.2, 0.2]}, None) == {"a": (0.2, 0.2)}
+
+
+def test_headset_override_beats_detection_both_ways():
+    from actions.spatial import resolve_headsets
+
+    # The Nova Pro reports nothing worn, so the map has to be able to say so on the user's behalf
+    assert resolve_headsets({"spk"}, {"nova": True}) == {"spk", "nova"}
+    assert resolve_headsets({"nova"}, {"nova": False}) == set()
+    assert resolve_headsets({"nova"}, None) == {"nova"}
+
+
+def test_headset_overrides_drop_malformed_entries():
+    from actions.spatial import normalize_headset_overrides
+
+    assert normalize_headset_overrides({"a": True, "": True, 7: True}) == {"a": True}
+    assert normalize_headset_overrides("nonsense") == {}
+    assert normalize_headset_overrides({"a": "yes"}) == {"a": True}
+
+
+def test_overriding_to_headset_splits_it_into_ears():
+    from actions.spatial import emitter_layout, resolve_headsets
+
+    headsets = resolve_headsets(set(), {"nova": True})
+    layout = emitter_layout(["nova", "spk"], headsets=headsets, positions={"spk": FRONT})
+
+    assert set(layout) == {"nova#left", "nova#right", "spk"}

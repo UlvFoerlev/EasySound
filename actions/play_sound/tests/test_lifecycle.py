@@ -84,3 +84,8 @@ def test_no_handle_based_stop_survives(action):
     source = SOURCE.read_text()
     assert "looping_handle" not in source
     assert "stop_looping" not in source
+
+
+def test_a_looping_pool_is_handed_to_the_backend(action):
+    """A loop replays one pick forever, so a pool of sounds has to be advanced by the backend."""
+    assert "play_pool" in calls_to(method(action, "_play"))

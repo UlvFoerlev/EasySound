@@ -18,6 +18,8 @@
     "action.play-sound.spatial.delay-subtitle": "Delay each speaker by the sound's travel time. Needs two or more speakers.",
     "action.play-sound.spatial.room": "Room width",
     "action.play-sound.spatial.room-subtitle": "Metres across the whole map, used to turn positions into distances",
+    "action.play-sound.spatial.headset-group": "Worn devices",
+    "action.play-sound.spatial.headset-group-subtitle": "Treat a device as a headset when it is worn rather than standing in the room. Detected automatically, but not every device reports it.",
     "action.play-sound.section.fades": "Fades",
     "action.play-sound.audio_files": "Audio Files",
     "action.play-sound.all_files": "All Files",

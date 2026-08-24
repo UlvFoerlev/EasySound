@@ -43,7 +43,9 @@ from ..spatial import (
     clamp_position,
     clamp_room_size,
     merge_positions,
+    normalize_headset_overrides,
     normalize_positions,
+    resolve_headsets,
     source_delays,
     stereo_balance,
 )
@@ -551,7 +553,7 @@ class PlaySoundAction(SoundActionBase):
             return None
 
         room_size, delay_enabled = self.room_settings(settings)
-        headsets = self.headset_sinks(available)
+        headsets = self.headset_sinks(available, settings)
         speakers = [sink for sink in sinks if sink not in headsets]
 
         # Delays need two speakers to mean anything, and a worn device has no flight time at all
@@ -566,10 +568,24 @@ class PlaySoundAction(SoundActionBase):
         )
         return [delays.get(sink, 0.0) for sink in sinks]
 
-    def headset_sinks(self, available: list[dict] | None = None) -> set[str]:
+    def headset_sinks(
+        self, available: list[dict] | None = None, settings: dict | None = None
+    ) -> set[str]:
         sinks = available if available is not None else self.list_sinks()
+        detected = {sink["name"] for sink in sinks if sink.get("kind") == SinkKind.HEADSET}
 
-        return {sink["name"] for sink in sinks if sink.get("kind") == SinkKind.HEADSET}
+        return resolve_headsets(detected, self.headset_overrides(settings))
+
+    def headset_overrides(self, settings: dict | None = None) -> dict[str, bool]:
+        return normalize_headset_overrides(self.plugin_settings(settings).get("headset_overrides"))
+
+    def save_headset_override(self, sink: str, is_headset: bool) -> None:
+        # Whether a device is worn belongs to the plugin, not to one action, just like its position
+        settings = self.plugin_base.get_settings()
+        overrides = normalize_headset_overrides(settings.get("headset_overrides"))
+        overrides[sink] = bool(is_headset)
+        settings["headset_overrides"] = overrides
+        self.plugin_base.set_settings(settings)
 
     def spatial_gains(
         self,
@@ -590,7 +606,7 @@ class PlaySoundAction(SoundActionBase):
             source,
             sinks,
             self.speaker_positions(settings),
-            self.headset_sinks(available),
+            self.headset_sinks(available, settings),
         )
         return [list(per_sink.get(sink, (1.0, 1.0))) for sink in sinks]
 
@@ -623,7 +639,8 @@ class PlaySoundAction(SoundActionBase):
             room_size=room_size,
             delay_enabled=delay_enabled,
             on_room_changed=self.save_room_settings,
-            headsets=self.headset_sinks(),
+            headsets=self.headset_sinks(available),
+            on_headset_changed=self.save_headset_override,
         )
         self.spatial_dialog.present(self.spatial_button_row)
 
@@ -818,9 +835,13 @@ class PlaySoundAction(SoundActionBase):
     def _play(self, **kwargs):
         backend = getattr(self.plugin_base, "backend", None)
         handle = None
-        path = self.picker.pick(self.sound_pool(), self.playback_order)
+        pool = self.sound_pool()
 
-        if path is None:
+        # A loop with a pool is handed over whole: the backend advances it, one sound cannot
+        supervised = kwargs.get("loops") == -1 and len(pool) > 1
+        path = None if supervised else self.picker.pick(pool, self.playback_order)
+
+        if not pool or (path is None and not supervised):
             self.show_error(duration=2)
             return None
 
@@ -837,15 +858,21 @@ class PlaySoundAction(SoundActionBase):
                 settings = self.plugin_base.get_settings() if needs_devices else None
 
                 sinks = self.resolve_sinks(available, settings)
-                handle = backend.play(
-                    path=path,
+                shared = dict(
                     sinks=sinks,
                     volume=self.volume,
                     gains=self.spatial_gains(sinks, available, settings),
                     delays=self.spatial_delays(sinks, available, settings),
                     rate_scale=rate_scale(self.rate_variation),
-                    **kwargs,
                 )
+
+                if supervised:
+                    kwargs.pop("loops", None)
+                    handle = backend.play_pool(
+                        paths=pool, order=self.playback_order.value, **shared, **kwargs
+                    )
+                else:
+                    handle = backend.play(path=path, **shared, **kwargs)
             except Exception:
                 handle = None
 
