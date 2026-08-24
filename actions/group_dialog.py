@@ -142,6 +142,11 @@ class SpeakerGroupDialog(Adw.Dialog):
         name = self.name_row.get_text().strip()
         selected = [name_ for name_, switch in self.sink_switches.items() if switch.get_active()]
 
+        # A disconnected member has no switch to read, so it is carried over instead of dropped
+        editing = next((g for g in self.groups if g["id"] == self.editing_id), None)
+        if editing is not None:
+            selected += [s for s in editing["sinks"] if s not in self.sink_switches]
+
         # A group with no name or no devices could never be selected meaningfully, so it is not saved
         if not name or not selected:
             self.name_row.add_css_class("error")

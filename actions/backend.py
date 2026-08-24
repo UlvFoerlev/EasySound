@@ -223,7 +223,6 @@ class Backend(BackendBase):
         sinks: list[str] | None = None,
         volume: float = 100.0,
         fade_in: float = 0.0,
-        fade_out: float = 0.0,
         gains: list[list[float]] | None = None,
         delays: list[float] | None = None,
         rate_scale: float = 1.0,
@@ -238,7 +237,7 @@ class Backend(BackendBase):
         if len(pool) == 1:
             return self.play(
                 path=pool[0], sinks=sinks, volume=volume, loops=-1, fade_in=fade_in,
-                fade_out=fade_out, gains=gains, delays=delays, rate_scale=rate_scale, tag=tag,
+                gains=gains, delays=delays, rate_scale=rate_scale, tag=tag,
             )
 
         with self.lock:
@@ -320,7 +319,11 @@ class Backend(BackendBase):
         if not self.preload_sound(path=key):
             return []
 
-        sound = self.cache[key]
+        # Fetched, not indexed: a concurrent warm-up that failed can drop the entry back out
+        sound = self.cache.get(key)
+        if sound is None:
+            return []
+
         _, rate, channels = sound
 
         # Playing the same samples at another rate shifts pitch and speed together
@@ -501,6 +504,7 @@ class Backend(BackendBase):
             played = 0
             remaining_loops = loops
             stop_at = None
+            cut = False
 
             while total:
                 # Held here rather than closed: the position is kept so a resume is seamless, and
@@ -512,6 +516,7 @@ class Backend(BackendBase):
                     stop_at = played
                     stop_frames = int(playback.stop_fade_out * rate)
                     if stop_frames <= 0:
+                        cut = True
                         break
 
                 if position >= total:
@@ -547,11 +552,13 @@ class Backend(BackendBase):
                 played += count
 
                 if stop_at is not None and played - stop_at >= max(int(playback.stop_fade_out * rate), 1):
+                    cut = True
                     break
 
             try:
-                # A stop discards what is still queued; a sound that ended naturally plays its tail out
-                if stop_at is not None:
+                # Only a stop that actually cut the sound short discards the queue; one that ran to
+                # its own end plays the tail out, even if a stop fade was armed just before it
+                if cut:
                     stream.flush()
                 else:
                     stream.drain()

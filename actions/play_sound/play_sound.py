@@ -37,6 +37,8 @@ from ..playlist import (
     resolve_sounds,
 )
 from ..sound_action_base import SoundActionBase
+from uuid import uuid4
+
 from ..spatial import (
     DEFAULT_ROOM_SIZE,
     channel_gains,
@@ -752,12 +754,27 @@ class PlaySoundAction(SoundActionBase):
         )
         self.group_dialog.present(self.speakers_row.widget)
 
+    def action_uid(self) -> str:
+        return self._get_property(key="uid", default="", enforce_type=str)
+
+    def ensure_action_uid(self) -> str:
+        # Assigned before a sound starts, never on the way out: a live tag must not change
+        uid = self.action_uid()
+        if not uid:
+            uid = uuid4().hex
+            self._set_property(key="uid", value=uid)
+
+        return uid
+
     def action_tag(self) -> str:
         """Names every sound this action starts, and survives the action being recreated."""
         page = getattr(self.page, "json_path", "") or ""
         ident = getattr(self.input_ident, "json_identifier", "") or ""
+        # A key may hold several Play Sound actions, which would otherwise stop each other's sounds
+        uid = self.action_uid()
+        tag = f"{page}|{ident}|{self.state}|{self.action_id}"
 
-        return f"{page}|{ident}|{self.state}|{self.action_id}"
+        return f"{tag}|{uid}" if uid else tag
 
     def loop_state(self) -> str:
         backend = getattr(self.plugin_base, "backend", None)
@@ -847,6 +864,7 @@ class PlaySoundAction(SoundActionBase):
 
         if backend is not None:
             try:
+                self.ensure_action_uid()
                 kwargs.setdefault("tag", self.action_tag())
                 # Gathered once: a Default target with spatial off touches neither rpyc nor the disk
                 needs_devices = self.spatial_enabled or self.speakers not in (
@@ -891,6 +909,10 @@ class PlaySoundAction(SoundActionBase):
                 row.widget.set_visible(relevant)
 
     def on_mode_change(self, widget, new_value, old_value):
+        # Reloading the config re-fires this with the value unchanged, which must not stop a loop
+        if target_value(new_value) == target_value(old_value):
+            return
+
         self.stop_sounds()
         self.active = False
         self.update_loop_option_visibility()

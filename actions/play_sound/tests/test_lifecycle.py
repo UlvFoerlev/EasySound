@@ -89,3 +89,9 @@ def test_no_handle_based_stop_survives(action):
 def test_a_looping_pool_is_handed_to_the_backend(action):
     """A loop replays one pick forever, so a pool of sounds has to be advanced by the backend."""
     assert "play_pool" in calls_to(method(action, "_play"))
+
+
+def test_the_tag_carries_a_per_action_identity(action):
+    """Two Play Sound actions on one key share page, input and state, so the tag needs more."""
+    assert "action_uid" in calls_to(method(action, "action_tag"))
+    assert "ensure_action_uid" in calls_to(method(action, "_play"))

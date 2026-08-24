@@ -67,7 +67,6 @@ class SpatialDialog(Adw.Dialog):
         self.saved = dict(positions)
 
         self.positions = emitter_layout(self.sinks, self.headsets, positions)
-        self.ring_unplaced(positions)
 
         self.set_title(self.lm.get("action.play-sound.spatial.title"))
         self.set_content_width(CANVAS_SIZE + 60)
@@ -140,13 +139,6 @@ class SpatialDialog(Adw.Dialog):
         view.set_content(Gtk.ScrolledWindow(child=content, propagate_natural_height=True))
         self.set_child(view)
 
-    def ring_unplaced(self, saved: dict) -> None:
-        # Speakers with no saved spot spread onto a ring instead of stacking on the listener
-        unplaced = [
-            sink for sink in self.sinks if sink not in self.headsets and sink not in saved
-        ]
-        self.positions.update(default_layout(unplaced))
-
     def on_headset_toggled(self, row, _param, sink: str) -> None:
         is_headset = row.get_active()
         if is_headset:
@@ -157,7 +149,6 @@ class SpatialDialog(Adw.Dialog):
         # A headset is two emitters and a speaker is one, so the map has to be rebuilt around it
         self.saved.update(self.positions)
         self.positions = emitter_layout(self.sinks, self.headsets, self.saved)
-        self.ring_unplaced(self.saved)
         self.dragging = None
 
         if self.on_headset_changed is not None:

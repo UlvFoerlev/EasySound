@@ -220,11 +220,19 @@ def emitter_layout(
 ) -> dict[str, tuple[float, float]]:
     headsets = headsets or set()
     positions = positions or {}
-    layout = {}
 
+    # Unplaced speakers ring the listener rather than stacking on it, so panning works before
+    # anything is dragged and playback matches the layout the map draws
+    unplaced = [sink for sink in sinks if sink not in headsets and sink not in positions]
+    ring = default_layout(unplaced)
+
+    layout = {}
     for sink in sinks:
         for emitter in emitters_for(sink, sink in headsets):
-            layout[emitter] = positions.get(emitter, default_emitter_position(emitter))
+            if emitter in positions:
+                layout[emitter] = positions[emitter]
+            else:
+                layout[emitter] = ring.get(emitter, default_emitter_position(emitter))
 
     return layout
 
