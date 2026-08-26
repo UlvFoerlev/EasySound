@@ -61,6 +61,21 @@ def test_page_deletion_is_subscribed_to(action):
     assert signals == {"ChangePage", "PageDelete"}
 
 
+@pytest.mark.parametrize("hook", ["on_remove", "on_removed_from_cache"])
+def test_every_removal_hook_unsubscribes(action, hook):
+    """SignalManager has no disconnect, so a dropped action keeps being called for every page change."""
+    assert "disconnect_signals" in calls_to(method(action, hook))
+
+
+def test_unsubscribing_covers_both_signals(action):
+    signals = {
+        node.attr
+        for node in ast.walk(method(action, "disconnect_signals"))
+        if isinstance(node, ast.Attribute) and node.attr in {"ChangePage", "PageDelete"}
+    }
+    assert signals == {"ChangePage", "PageDelete"}
+
+
 def test_every_playback_is_tagged_in_one_place(action):
     """The tag is what survives action recreation; a call site setting its own could miss one."""
     defaults = [

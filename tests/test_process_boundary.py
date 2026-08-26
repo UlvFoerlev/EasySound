@@ -27,11 +27,16 @@ def test_backend_does_not_import_the_frontend_process():
     assert "globals" not in roots
 
 
+# Installed by __install__.py into the plugin's own .venv, so importing one from the GTK process
+# raises ImportError there
+BACKEND_ONLY = ("numpy", "pasimple", "pulsectl", "soundfile")
+
+
 @pytest.mark.parametrize(
     "path",
     [p for p in source_files() if p != BACKEND],
     ids=lambda p: p.name,
 )
-def test_frontend_does_not_import_pygame(path):
-    # pygame lives only in the backend process; the frontend reaches it over rpyc
-    assert "pygame" not in _imported_roots(path)
+def test_frontend_does_not_import_the_audio_stack(path):
+    # The audio stack lives only in the backend process; the frontend reaches it over rpyc
+    assert not _imported_roots(path) & set(BACKEND_ONLY)

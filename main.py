@@ -116,14 +116,17 @@ class PluginEasySound(PluginBase):
         """Brings saved pages up to date. An old page imported later is rewritten on the next launch."""
         try:
             page_paths = gl.page_manager.get_pages()
-        except Exception:
+        except Exception as error:
+            # The legacy holder is gone, so a silent failure here leaves v1 buttons unresolvable
+            logger.warning(f"EasySound could not list pages to migrate: {error}")
             return 0, 0
 
         ids = sounds = 0
         for page_path in page_paths:
             try:
                 page_ids, page_sounds = self.migrate_page(Path(page_path))
-            except Exception:  # one unwritable page must not stop the rest
+            except Exception as error:  # one unwritable page must not stop the rest
+                logger.warning(f"EasySound could not migrate {page_path}: {error}")
                 continue
 
             ids += page_ids
@@ -137,7 +140,8 @@ class PluginEasySound(PluginBase):
     def migrate_page(self, page_path: Path) -> tuple[int, int]:
         try:
             data = json.loads(page_path.read_text())
-        except (OSError, ValueError):
+        except (OSError, ValueError) as error:
+            logger.warning(f"EasySound could not read {page_path} for migration: {error}")
             return 0, 0
 
         play_sound_id = self.play_sound_action_id()

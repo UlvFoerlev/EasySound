@@ -73,5 +73,6 @@
     "action.stop-all.fade-out.title": "Fade Out",
     "action.stop-all.fade-out.subtitle": "Fade everything out over 'n' seconds instead of cutting it off.",
     "plugin.group.name": "EasySound",
-    "action.play-sound.sounds.missing": "This file no longer exists"
+    "action.play-sound.sounds.missing": "This file no longer exists",
+    "action.play-sound.sounds.unreadable": "This file exists but cannot be decoded"
 }

@@ -511,6 +511,19 @@ def test_stopping_discards_whatever_is_still_queued(backend, tmp_path, fake_stre
     assert fake_streams[0].drained is False
 
 
+def test_stopping_with_a_fade_plays_the_ramp_out(backend, tmp_path, fake_streams):
+    path = tmp_path / "tone.wav"
+    write_tone(path, seconds=0.05)
+
+    handle = backend.play(str(path), sinks=["a"], loops=-1)
+    backend.stop(handle, fade_out=0.2)
+    assert wait_for_idle(backend)
+
+    # Flushing here would discard the ramp that was just written, turning the fade into a click
+    assert fake_streams[0].drained is True
+    assert fake_streams[0].flushed is False
+
+
 def test_rate_scale_shifts_the_stream_rate(backend, tmp_path, monkeypatch):
     path = tmp_path / "tone.wav"
     write_tone(path, seconds=0.05)

@@ -5,5 +5,4 @@ pythonpath = ["."]
 addopts = "-q"
 markers = [
     "needs_streamcontroller: requires StreamController's src.* on sys.path",
-    "needs_pygame: requires pygame-ce (present only in the plugin's own .venv)",
 ]

@@ -504,7 +504,7 @@ class Backend(BackendBase):
             played = 0
             remaining_loops = loops
             stop_at = None
-            cut = False
+            discard = False
 
             while total:
                 # Held here rather than closed: the position is kept so a resume is seamless, and
@@ -514,9 +514,8 @@ class Backend(BackendBase):
 
                 if playback.stopping and stop_at is None:
                     stop_at = played
-                    stop_frames = int(playback.stop_fade_out * rate)
-                    if stop_frames <= 0:
-                        cut = True
+                    if int(playback.stop_fade_out * rate) <= 0:
+                        discard = True
                         break
 
                 if position >= total:
@@ -552,13 +551,12 @@ class Backend(BackendBase):
                 played += count
 
                 if stop_at is not None and played - stop_at >= max(int(playback.stop_fade_out * rate), 1):
-                    cut = True
                     break
 
             try:
-                # Only a stop that actually cut the sound short discards the queue; one that ran to
-                # its own end plays the tail out, even if a stop fade was armed just before it
-                if cut:
+                # Only a stop with no fade discards the queue; a completed fade-out is still sitting
+                # in the server buffer and has to be played out, or the ramp is thrown away
+                if discard:
                     stream.flush()
                 else:
                     stream.drain()

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import globals as gl
 from gi.repository import Adw, Gio, GLib, Gtk
 from GtkHelper.ComboRow import SimpleComboRowItem
 from GtkHelper.GenerativeUI.ComboRow import ComboRow
@@ -44,6 +45,7 @@ from ..spatial import (
     channel_gains,
     clamp_position,
     clamp_room_size,
+    emitter_layout,
     merge_positions,
     normalize_headset_overrides,
     normalize_positions,
@@ -366,14 +368,22 @@ class PlaySoundAction(SoundActionBase):
         for path in pool:
             row = Adw.ActionRow(title=Path(path).name, subtitle=path)
 
-            # Checked locally rather than through the backend: a missing file is the common mistake
+            # A missing file is the common mistake and is checked locally; one that exists still has
+            # to decode, which only the backend can say, and preload_sound is a cached no-op by now
+            warning = None
             if not Path(path).is_file():
-                missing = Gtk.Image(
-                    icon_name="dialog-warning-symbolic",
-                    valign=Gtk.Align.CENTER,
-                    tooltip_text=lm.get("action.play-sound.sounds.missing"),
+                warning = lm.get("action.play-sound.sounds.missing")
+            elif self._sound_loads(path) is False:
+                warning = lm.get("action.play-sound.sounds.unreadable")
+
+            if warning:
+                row.add_suffix(
+                    Gtk.Image(
+                        icon_name="dialog-warning-symbolic",
+                        valign=Gtk.Align.CENTER,
+                        tooltip_text=warning,
+                    )
                 )
-                row.add_suffix(missing)
 
             remove = Gtk.Button(
                 icon_name="user-trash-symbolic",
@@ -454,15 +464,16 @@ class PlaySoundAction(SoundActionBase):
 
         self.save_sounds(added)
 
-    def _sound_loads(self, path: str) -> bool:
+    def _sound_loads(self, path: str) -> bool | None:
+        # None means "cannot say": with no backend to ask, an unproven file must not be flagged bad
         backend = getattr(self.plugin_base, "backend", None)
         if not path or backend is None:
-            return False
+            return None
 
         try:
             return bool(backend.preload_sound(path))
         except Exception:  # rpyc reraises backend and connection faults as arbitrary types
-            return False
+            return None
 
     def list_sinks(self) -> list[dict]:
         backend = getattr(self.plugin_base, "backend", None)
@@ -562,10 +573,12 @@ class PlaySoundAction(SoundActionBase):
         if not delay_enabled or len(speakers) < 2:
             return None
 
-        positions = self.speaker_positions(settings)
+        # The same layout the gains and the map use, so an unplaced speaker sits on the ring here
+        # too rather than on top of the listener, where it would never earn a delay
+        layout = emitter_layout(sinks, headsets, self.speaker_positions(settings))
         delays = source_delays(
             self.spatial_source,
-            {sink: positions.get(sink, (0.0, 0.0)) for sink in speakers},
+            {sink: layout[sink] for sink in speakers},
             room_size,
         )
         return [delays.get(sink, 0.0) for sink in sinks]
@@ -810,6 +823,7 @@ class PlaySoundAction(SoundActionBase):
     def on_remove(self) -> None:
         # Nothing can reach these sounds once the action is gone, so none of them may outlive it
         self.stop_sounds()
+        self.disconnect_signals()
 
     def on_removed_from_cache(self) -> None:
         # Clearing a key drops its actions without ever calling on_remove, and plain cache eviction
@@ -817,8 +831,22 @@ class PlaySoundAction(SoundActionBase):
         if not self.input_still_saved():
             self.stop_sounds()
 
+        self.disconnect_signals()
+
         # Last, so a failure in the base teardown cannot leave the sound running
         super().on_removed_from_cache()
+
+    def disconnect_signals(self) -> None:
+        # SignalManager has no disconnect, so a dropped action stays subscribed and keeps being
+        # called for every page change forever; take the callbacks back out by hand
+        for signal, callback in (
+            (Signals.ChangePage, self.on_page_changed),
+            (Signals.PageDelete, self.on_page_deleted),
+        ):
+            try:
+                gl.signal_manager.connected_signals.get(signal, []).remove(callback)
+            except Exception:
+                pass
 
     def input_still_saved(self) -> bool:
         # An unreadable page counts as present: cutting a sound off wrongly is worse than a late stop
