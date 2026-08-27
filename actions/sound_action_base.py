@@ -1,8 +1,8 @@
-from src.backend.PluginManager.ActionBase import ActionBase
+from src.backend.PluginManager.ActionCore import ActionCore
 from typing import Any
 
 
-class SoundActionBase(ActionBase):
+class SoundActionBase(ActionCore):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -18,6 +18,7 @@ class SoundActionBase(ActionBase):
         return value
 
     def _set_property(self, key: str, value: Any) -> None:
+        # Only for settings no generative row owns, such as a value edited in a dialog
         settings = self.get_settings()
         settings[key] = value
         self.set_settings(settings)

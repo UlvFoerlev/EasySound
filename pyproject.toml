@@ -1,0 +1,8 @@
+# Config only: StreamController owns the runtime deps in assets/requirements.txt and builds .venv itself
+[tool.pytest.ini_options]
+# No testpaths: tests live in a tests/ dir beside the code they cover, so discovery walks the tree
+pythonpath = ["."]
+addopts = "-q"
+markers = [
+    "needs_streamcontroller: requires StreamController's src.* on sys.path",
+]

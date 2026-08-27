@@ -1,0 +1,28 @@
+name: Tests
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+
+jobs:
+  Test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+          python-version: "3.13"
+
+      # pulsectl loads libpulse at import time, so the audio engine tests need it present
+      - name: Install libpulse
+        run: sudo apt-get update && sudo apt-get install -y libpulse0
+
+      # No uv sync: there are no project deps, and it would claim .venv, which __install__.py owns
+      - name: Pytest
+        run: uv run --no-project --with-requirements requirements-test.txt pytest
